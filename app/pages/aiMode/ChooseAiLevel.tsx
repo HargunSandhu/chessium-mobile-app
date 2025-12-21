@@ -17,6 +17,14 @@ const ChooseAiLevel = () => {
   });
   const router = useRouter();
 
+  const levels = [
+    { level: 1, title: "Level 1: Beginner", slogan: "Just Starting Out" },
+    { level: 2, title: "Level 2: Novice", slogan: "Just Beyond Basics" },
+    { level: 3, title: "Level 3: Intermediate", slogan: "Developing Strategy" },
+    { level: 4, title: "Level 4: Advanced", slogan: "The Strategist" },
+    { level: 5, title: "Level 5: Master/Expert", slogan: "The Final Test" },
+  ];
+
   return (
     <SafeAreaView style={styles.main}>
       {/* Background Pieces */}
@@ -39,17 +47,21 @@ const ChooseAiLevel = () => {
       </View>
 
       {/* Buttons */}
-      {[
-        { level: "Level 1: Beginner", slogan: "Just Starting Out" },
-        { level: "Level 2: Novice", slogan: "Just Beyond Basics" },
-        { level: "Level 3: Intermediate", slogan: "Developing Strategy" },
-        { level: "Level 4: Advanced", slogan: "The Strategist" },
-        { level: "Level 5: Master/Expert", slogan: "The Final Test" },
-      ].map((item, index) => (
-        <TouchableOpacity key={index} style={{ width: "100%" }}>
+      {levels.map((item, index) => (
+        <TouchableOpacity
+          key={index}
+          style={{ width: "100%" }}
+          activeOpacity={0.8}
+          onPress={() =>
+            router.push({
+              pathname: "/pages/aiMode/AiGameScreen",
+              params: { level: item.level.toString() },
+            })
+          }
+        >
           <View style={styles.buttons}>
             <View>
-              <Text style={styles.levelTxt}>{item.level}</Text>
+              <Text style={styles.levelTxt}>{item.title}</Text>
               <Text style={styles.sloganTxt}>{item.slogan}</Text>
             </View>
             <Ionicons name="arrow-forward" size={28} color="#3B82F6" />
@@ -68,11 +80,11 @@ const styles = StyleSheet.create({
   },
 
   headerContainer: {
-    flexDirection: "row", // 👈 horizontal layout
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     marginTop: 40,
-    gap: 10, // adds spacing between arrow and text
+    gap: 10,
   },
 
   backWrapper: {

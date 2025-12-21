@@ -10,24 +10,25 @@ export default ({ config }) => ({
   scheme: "chessium",
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
+
   ios: {
     supportsTablet: true,
   },
+
   android: {
     package: "com.anonymous.chessium",
     adaptiveIcon: {
-      backgroundColor: "#E6F4FE",
-      foregroundImage: "./assets/images/android-icon-foreground.png",
-      backgroundImage: "./assets/images/android-icon-background.png",
-      monochromeImage: "./assets/images/android-icon-monochrome.png",
+      backgroundColor: "#E6F4FE"   // keep only background color
     },
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
   },
+
   web: {
     output: "static",
     favicon: "./assets/images/favicon.png",
   },
+
   plugins: [
     "expo-router",
     [
@@ -44,10 +45,12 @@ export default ({ config }) => ({
     ],
     "expo-font",
   ],
+
   experiments: {
     typedRoutes: true,
     reactCompiler: true,
   },
+
   extra: {
     supabaseUrl: process.env.SUPABASE_URL,
     supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
