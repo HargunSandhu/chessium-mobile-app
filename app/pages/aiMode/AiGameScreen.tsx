@@ -187,7 +187,6 @@ const AiGameScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Opponent */}
       <View style={styles.opponentContainer}>
         <Ionicons name="person-circle-outline" size={50} color="#fff" />
         <View style={{ marginLeft: 12 }}>
@@ -197,7 +196,7 @@ const AiGameScreen = () => {
       </View>
 
       {/* Board */}
-      <View style={{ width: BOARD_SIZE, height: BOARD_SIZE }}>
+      <View style={{ width: BOARD_SIZE, height: BOARD_SIZE, marginTop: 30 }}>
         <Chessboard
           fen={fen}
           onMove={onUserMove}
@@ -307,7 +306,7 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: "row",
-    marginTop: 20,
+    marginTop: 50,
     gap: 100,
   },
   btnContainer: {
