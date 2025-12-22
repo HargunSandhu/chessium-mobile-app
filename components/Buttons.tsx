@@ -1,24 +1,20 @@
 import React from "react";
 import {
-  View,
-  GestureResponderEvent,
   Text,
   StyleSheet,
   Image,
+  DimensionValue,
+  View,
+  TouchableOpacity,
 } from "react-native";
-import { TouchableOpacity } from "react-native-gesture-handler";
-
 import { LinearGradient } from "expo-linear-gradient";
-import type { DimensionValue, ViewStyle } from "react-native";
 import { Inter_600SemiBold, useFonts } from "@expo-google-fonts/inter";
 
 type ButtonProps = {
   text?: string;
   width?: DimensionValue;
   height?: DimensionValue;
-  // onPress?: (event: GestureResponderEvent) => void;
-  onPress?: (event?: any) => void;
-  justifyContent?: ViewStyle["justifyContent"];
+  onPress?: () => void;
   imagePath?: string;
   imageSize?: number;
 };
@@ -26,9 +22,8 @@ type ButtonProps = {
 const Button1 = ({
   text,
   onPress,
-  width = "90%",
-  height = 64,
-  justifyContent = "center",
+  width = "100%",
+  height = 56,
 }: ButtonProps) => {
   const [fontsLoaded] = useFonts({
     Inter_600SemiBold,
@@ -37,21 +32,16 @@ const Button1 = ({
   if (!fontsLoaded) return null;
 
   return (
-    <View style={[styles.container, { justifyContent, width: "100%", height }]}>
-      <LinearGradient
-        colors={["#3B82F6", "#2563EB", "#1E3A8A"]}
-        style={[styles.gradient, { width, height }]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-      >
-        <TouchableOpacity
-          onPress={onPress}
-          style={[styles.button, { width: "100%", height: "100%" }]}
-        >
-          <Text style={styles.text}>{text}</Text>
-        </TouchableOpacity>
-      </LinearGradient>
-    </View>
+    <LinearGradient
+      colors={["#3B82F6", "#2563EB", "#1E3A8A"]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 0 }}
+      style={[styles.gradient, { width, height }]}
+    >
+      <TouchableOpacity onPress={onPress} style={styles.pressable}>
+        <Text style={styles.primaryText}>{text}</Text>
+      </TouchableOpacity>
+    </LinearGradient>
   );
 };
 
@@ -59,105 +49,81 @@ const Button2 = ({
   text,
   onPress,
   imagePath,
-  imageSize = 30,
-  width = "95%",
-  height = 64,
+  imageSize = 24,
+  width = "100%",
+  height = 56,
 }: ButtonProps) => {
   const showText = !!text;
 
   return (
-    <View style={[styles.container, { width }]}>
-      <TouchableOpacity
-        onPress={onPress}
-        style={[styles.buttonPlain, { height, width }]}
-      >
-        {showText ? (
-          <View style={styles.row}>
-            {imagePath && (
-              <Image
-                source={{ uri: imagePath }}
-                style={{
-                  marginRight: 12,
-                  width: imageSize,
-                  height: imageSize,
-                }}
-                resizeMode="contain"
-              />
-            )}
-            <Text style={styles.text}>{text}</Text>
-          </View>
-        ) : (
-          <View style={styles.iconWrapper}>
-            {imagePath && (
-              <Image
-                source={{ uri: imagePath }}
-                style={{
-                  width: imageSize,
-                  height: imageSize,
-                }}
-                resizeMode="contain"
-              />
-            )}
-          </View>
-        )}
-      </TouchableOpacity>
-    </View>
+    <TouchableOpacity
+      onPress={onPress}
+      style={[styles.outlineButton, { width, height }]}
+    >
+      {showText ? (
+        <View style={styles.row}>
+          {imagePath && (
+            <Image
+              source={{ uri: imagePath }}
+              style={{
+                width: imageSize,
+                height: imageSize,
+                marginRight: 10,
+              }}
+              resizeMode="contain"
+            />
+          )}
+          <Text style={styles.secondaryText}>{text}</Text>
+        </View>
+      ) : (
+        imagePath && (
+          <Image
+            source={{ uri: imagePath }}
+            style={{ width: imageSize, height: imageSize }}
+            resizeMode="contain"
+          />
+        )
+      )}
+    </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    alignItems: "center",
-    justifyContent: "center",
-    marginVertical: 8,
-  },
-  gradient: {
-    borderRadius: 8,
-    // width: "90%",
-  },
-  button: {
-    height: 64,
+  pressable: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  buttonPlain: {
-    backgroundColor: "transparent",
-    borderColor: "#3B82F6",
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  text: {
-    color: "#fff",
-    fontSize: 24,
-    fontFamily: "Inter_600SemiBold",
-  },
+
   row: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
   },
 
-  iconButtonContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    marginVertical: 8,
-    width: "100%",
+  gradient: {
+    borderRadius: 12,
   },
-  iconButton: {
-    backgroundColor: "transparent",
-    borderColor: "#9B7CF9",
+
+  primaryText: {
+    color: "#fff",
+    fontSize: 20,
+    fontFamily: "Inter_600SemiBold",
+  },
+
+  outlineButton: {
     borderWidth: 1,
+    borderColor: "#3B82F6",
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden",
+    backgroundColor: "transparent",
   },
-  iconWrapper: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
+
+  secondaryText: {
+    color: "#cbd5e1",
+    fontSize: 18,
+    fontFamily: "Inter_600SemiBold",
   },
 });
 
