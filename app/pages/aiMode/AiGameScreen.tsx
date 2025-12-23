@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -21,12 +21,11 @@ import { RouteProp, useRoute } from "@react-navigation/native";
 import { Button1, Button2 } from "@/components/Buttons";
 
 type RootStackParamList = {
-  AiGame: {
-    level: 1 | 2 | 3 | 4 | 5;
-  };
+  AiGame: { level: 1 | 2 | 3 | 4 | 5 };
 };
 
 const BOARD_SIZE = Dimensions.get("window").width;
+const RESULT_POPUP_DELAY = 700;
 
 const AiGameScreen = () => {
   const route = useRoute<RouteProp<RootStackParamList, "AiGame">>();
@@ -34,85 +33,89 @@ const AiGameScreen = () => {
 
   const chess = useRef(new Chess()).current;
 
+  const [playerColor, setPlayerColor] = useState<"w" | "b">("w");
+
   const [fen, setFen] = useState(chess.fen());
   const [thinking, setThinking] = useState(false);
   const [showResignModal, setShowResignModal] = useState(false);
+  const [showResultModal, setShowResultModal] = useState(false);
+
+  const [gameResult, setGameResult] = useState<"win" | "loss" | "draw" | null>(
+    null
+  );
+  const [drawReason, setDrawReason] = useState("");
+
   const [highlightedSquares, setHighlightedSquares] = useState<
     HighlightedSquare[]
   >([]);
 
-  const getDepthForLevel = (lvl: number) => {
-    switch (lvl) {
-      case 1:
-        return 2;
-      case 2:
-        return 4;
-      case 3:
-        return 8;
-      case 4:
-        return 12;
-      case 5:
-        return 16;
-      default:
-        return 8;
+  const [hintArrow, setHintArrow] = useState<
+    { from: string; to: string; color?: string }[]
+  >([]);
+
+  useEffect(() => {
+    const randomSide = Math.random() < 0.5 ? "w" : "b";
+    setPlayerColor(randomSide);
+  }, []);
+
+  const getDepthForLevel = (lvl: number) => [2, 4, 8, 12, 16][lvl - 1] ?? 8;
+
+  const checkGameResult = () => {
+    if (!chess.isGameOver() || showResultModal) return;
+
+    if (chess.isCheckmate()) {
+      setGameResult(chess.turn() === playerColor ? "loss" : "win");
+    } else {
+      setGameResult("draw");
+
+      if (chess.isStalemate()) setDrawReason("Stalemate");
+      else if (chess.isThreefoldRepetition())
+        setDrawReason("Threefold Repetition");
+      else if (chess.isInsufficientMaterial())
+        setDrawReason("Insufficient Material");
+      else setDrawReason("50-Move Rule");
     }
+
+    setTimeout(() => setShowResultModal(true), RESULT_POPUP_DELAY);
   };
 
   const findKingSquare = (color: "w" | "b") => {
     const files = ["a", "b", "c", "d", "e", "f", "g", "h"];
-    const ranks = ["1", "2", "3", "4", "5", "6", "7", "8"];
-
-    for (const r of ranks) {
+    for (let r = 1; r <= 8; r++) {
       for (const f of files) {
-        const sq = f + r;
-        const piece = chess.get(sq as any);
-        if (piece?.type === "k" && piece.color === color) {
-          return sq;
-        }
+        const sq = `${f}${r}`;
+        const p = chess.get(sq as any);
+        if (p?.type === "k" && p.color === color) return sq;
       }
     }
     return null;
   };
 
   const updateHighlights = (move?: { from: string; to: string }) => {
-    const highlights: HighlightedSquare[] = [];
+    const h: HighlightedSquare[] = [];
 
     if (move) {
-      highlights.push(
+      h.push(
         { square: move.from, color: "rgba(255,215,0,0.6)" },
         { square: move.to, color: "rgba(255,215,0,0.6)" }
       );
     }
 
     if (chess.isCheck()) {
-      const kingSq = findKingSquare(chess.turn());
-      if (kingSq) {
-        highlights.push({
-          square: kingSq,
-          color: "rgba(255,0,0,0.75)",
-        });
-      }
+      const king = findKingSquare(chess.turn());
+      if (king) h.push({ square: king, color: "rgba(255,0,0,0.8)" });
     }
 
-    setHighlightedSquares(highlights);
+    setHighlightedSquares(h);
   };
 
-  const maybeRandomMove = () => {
-    const moves = chess.moves({ verbose: true });
-    if (!moves.length) return null;
-    return moves[Math.floor(Math.random() * moves.length)];
-  };
-
-  const fetchAiMove = async (fen: string) => {
+  const fetchAiMove = async (fen: string, depth: number) => {
     try {
       setThinking(true);
       const res = await fetch("https://chess-api.com/v1", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fen,
-          depth: getDepthForLevel(level),
-        }),
+        body: JSON.stringify({ fen, depth }),
       });
       if (!res.ok) return null;
       const data = await res.json();
@@ -122,146 +125,196 @@ const AiGameScreen = () => {
     }
   };
 
-  const onUserMove = async (from: string, to: string, promotion?: string) => {
-    if (thinking || chess.isGameOver()) return;
-
-    let move = chess.move({ from, to, promotion });
-
-    if (!move && !promotion) {
-      for (const p of ["q", "r", "b", "n"]) {
-        const attempt = chess.move({ from, to, promotion: p });
-        if (attempt) {
-          move = attempt;
-          break;
-        }
-      }
-    }
-
-    if (!move) return;
-
-    setFen(chess.fen());
-    updateHighlights({ from, to });
-
+  const makeAiMove = async () => {
     if (chess.isGameOver()) return;
 
-    if (level <= 2 && Math.random() < 0.35) {
-      const r = maybeRandomMove();
-      if (r) {
-        chess.move(r);
-        setFen(chess.fen());
-        updateHighlights({ from: r.from, to: r.to });
-        return;
-      }
-    }
-
-    const uci = await fetchAiMove(chess.fen());
+    const uci = await fetchAiMove(chess.fen(), getDepthForLevel(level));
     if (!uci) return;
 
-    const aiMove = chess.move({
+    const move = chess.move({
       from: uci.slice(0, 2),
       to: uci.slice(2, 4),
       promotion: uci[4],
     });
 
-    if (!aiMove) return;
+    if (!move) return;
 
     setFen(chess.fen());
-    updateHighlights({
-      from: aiMove.from,
-      to: aiMove.to,
-    });
+    updateHighlights({ from: move.from, to: move.to });
+    checkGameResult();
   };
 
-  const handleResign = () => {
-    setShowResignModal(true);
+  const onUserMove = async (from: string, to: string, promotion?: string) => {
+    if (thinking || chess.isGameOver() || chess.turn() !== playerColor) return;
+
+    setHintArrow([]);
+
+    let move = chess.move({ from, to, promotion });
+    if (!move && !promotion) {
+      for (const p of ["q", "r", "b", "n"]) {
+        move = chess.move({ from, to, promotion: p }) || move;
+      }
+    }
+    if (!move) return;
+
+    setFen(chess.fen());
+    updateHighlights({ from, to });
+    checkGameResult();
+    if (chess.isGameOver()) return;
+
+    await makeAiMove();
   };
 
-  const cancelResign = () => {
-    setShowResignModal(false);
+  const handleHint = async () => {
+    if (thinking || chess.isGameOver() || chess.turn() !== playerColor) return;
+
+    const uci = await fetchAiMove(chess.fen(), 6);
+    if (!uci) return;
+
+    setHintArrow([
+      { from: uci.slice(0, 2), to: uci.slice(2, 4), color: "#3b82f6" },
+    ]);
   };
 
-  const confirmResign = () => {
-    setShowResignModal(false);
-    router.replace("/pages/Dashboard");
+  useEffect(() => {
+    if (playerColor === "b") {
+      setTimeout(makeAiMove, 300);
+    }
+  }, [playerColor]);
+
+  const playAgain = () => {
+    chess.reset();
+
+    const randomSide = Math.random() < 0.5 ? "w" : "b";
+    setPlayerColor(randomSide);
+
+    setFen(chess.fen());
+    setHighlightedSquares([]);
+    setHintArrow([]);
+    setGameResult(null);
+    setDrawReason("");
+    setShowResultModal(false);
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.opponentContainer}>
-        <Ionicons name="person-circle-outline" size={50} color="#fff" />
+        <Ionicons name="hardware-chip-outline" size={48} color="#fff" />
         <View style={{ marginLeft: 12 }}>
           <Text style={styles.opponentName}>Machine</Text>
-          <Text style={styles.opponentLevel}>Level {level}</Text>
+          <Text style={styles.opponentLevel}>
+            Level {level} · You play {playerColor === "w" ? "White" : "Black"}
+          </Text>
         </View>
       </View>
 
-      {/* Board */}
       <View style={{ width: BOARD_SIZE, height: BOARD_SIZE, marginTop: 30 }}>
         <Chessboard
           fen={fen}
           onMove={onUserMove}
           highlightedSquares={highlightedSquares}
+          arrows={hintArrow}
           boardTheme={DefaultThemes.blue}
           showCoordinates={false}
-          showArrows
+          perspective={playerColor === "w" ? "white" : "black"}
         />
 
         {thinking && (
           <View style={styles.thinkingOverlay}>
             <ActivityIndicator size="large" />
-            <Text style={{ color: "#fff", marginTop: 6 }}>AI thinking...</Text>
+            <Text style={{ color: "#fff", marginTop: 6 }}>AI thinking…</Text>
           </View>
         )}
       </View>
 
-      {/* Actions */}
       <View style={styles.actions}>
         <View style={styles.btnContainer}>
-          <TouchableOpacity style={styles.circleBtn} onPress={handleResign}>
-            <Ionicons name="flag" color="#3b82f6" size={30} />
+          <TouchableOpacity
+            style={styles.circleBtn}
+            onPress={() => setShowResignModal(true)}
+          >
+            <Ionicons name="flag" size={28} color="#3b82f6" />
           </TouchableOpacity>
           <Text style={styles.btnText}>Resign</Text>
         </View>
 
         <View style={styles.btnContainer}>
-          <TouchableOpacity style={styles.circleBtn}>
-            <Ionicons name="bulb" color="#3b82f6" size={30} />
+          <TouchableOpacity style={styles.circleBtn} onPress={handleHint}>
+            <Ionicons name="bulb" size={28} color="#3b82f6" />
           </TouchableOpacity>
           <Text style={styles.btnText}>Hint</Text>
         </View>
       </View>
 
-      {/* Resign Modal */}
-      <Modal
-        transparent
-        animationType="fade"
-        visible={showResignModal}
-        onRequestClose={cancelResign}
-      >
+      <Modal transparent animationType="fade" visible={showResignModal}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
+            <Ionicons
+              name="flag"
+              size={42}
+              color="#ef4444"
+              style={{ alignSelf: "center", marginBottom: 10 }}
+            />
             <Text style={styles.modalTitle}>Resign Game?</Text>
-            <Text style={styles.modalText}>
-              Are you sure you want to resign this match?
-            </Text>
 
             <View style={styles.modalActions}>
               <View style={styles.halfBtn}>
                 <Button1
                   text="Resign"
-                  onPress={confirmResign}
-                  // width="100%"
-                  // height={56}
+                  onPress={() => router.replace("/pages/Dashboard")}
                 />
               </View>
               <View style={styles.halfBtn}>
                 <Button2
                   text="Cancel"
-                  onPress={cancelResign}
-                  // width="100%"
-                  // height={56}
+                  onPress={() => setShowResignModal(false)}
                 />
               </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal transparent animationType="fade" visible={showResultModal}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Ionicons
+              name={
+                gameResult === "win"
+                  ? "trophy"
+                  : gameResult === "loss"
+                  ? "skull"
+                  : "remove-circle"
+              }
+              size={48}
+              color={
+                gameResult === "win"
+                  ? "#22c55e"
+                  : gameResult === "loss"
+                  ? "#ef4444"
+                  : "#facc15"
+              }
+              style={{ alignSelf: "center", marginBottom: 12 }}
+            />
+
+            <Text style={styles.modalTitle}>
+              {gameResult === "win"
+                ? "You Won"
+                : gameResult === "loss"
+                ? "You Lost"
+                : "Draw"}
+            </Text>
+
+            {gameResult === "draw" && (
+              <Text style={styles.modalText}>{drawReason}</Text>
+            )}
+
+            <Button1 text="Play Again" onPress={playAgain} />
+            <View style={{ marginTop: 12 }}>
+              <Button2
+                text="Back to Dashboard"
+                onPress={() => router.push("/pages/Dashboard")}
+              />
             </View>
           </View>
         </View>
@@ -283,7 +336,6 @@ const styles = StyleSheet.create({
     width: "90%",
     height: 70,
     paddingHorizontal: 12,
-    paddingVertical: 8,
     flexDirection: "row",
     alignItems: "center",
     marginTop: "10%",
@@ -309,9 +361,7 @@ const styles = StyleSheet.create({
     marginTop: 50,
     gap: 100,
   },
-  btnContainer: {
-    alignItems: "center",
-  },
+  btnContainer: { alignItems: "center" },
   circleBtn: {
     width: 60,
     height: 60,
@@ -320,10 +370,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  btnText: {
-    color: "#fff",
-    marginTop: 6,
-  },
+  btnText: { color: "#fff", marginTop: 6 },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
@@ -341,23 +388,21 @@ const styles = StyleSheet.create({
   modalTitle: {
     color: "#fff",
     fontSize: 20,
-    marginBottom: 8,
+    marginBottom: 12,
+    textAlign: "center",
     fontFamily: "Inter_600SemiBold",
   },
   modalText: {
     color: "#cbd5e1",
     fontSize: 15,
-    marginBottom: 20,
+    marginBottom: 16,
+    textAlign: "center",
   },
   modalActions: {
     flexDirection: "row",
     gap: 12,
-    marginTop: 10,
   },
-
-  halfBtn: {
-    flex: 1,
-  },
+  halfBtn: { flex: 1 },
 });
 
 export default AiGameScreen;
