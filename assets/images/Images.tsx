@@ -15,4 +15,6 @@ export const Images = {
     "https://vqludnafepubvxiylrgp.supabase.co/storage/v1/object/public/images/blitz.png",
   rapid:
     "https://vqludnafepubvxiylrgp.supabase.co/storage/v1/object/public/images/rapid.png",
+  globe:
+    "https://vqludnafepubvxiylrgp.supabase.co/storage/v1/object/public/images/globe.json",
 };

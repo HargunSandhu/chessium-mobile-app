@@ -44,6 +44,7 @@ export default ({ config }) => ({
       },
     ],
     "expo-font",
+    "expo-video",
   ],
 
   experiments: {

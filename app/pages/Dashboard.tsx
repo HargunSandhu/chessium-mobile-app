@@ -31,8 +31,7 @@ const Dashboard = () => {
 
       <View style={styles.cardsRow}>
         <TouchableOpacity
-          // activeOpacity={0.5} // stronger visual feedback
-          onPress={() => console.log("Pressed")}
+          onPress={() => router.navigate("/pages/competitiveMode/ChooseMode")}
         >
           <View style={styles.competitiveContainer}>
             <Image source={{ uri: Images.rook }} style={styles.rook} />
@@ -121,7 +120,7 @@ const styles = StyleSheet.create({
   },
   cardsRow: {
     flexDirection: "row",
-    justifyContent: "flex-end",
+    justifyContent: "center",
     width: "90%",
     gap: 10,
   },

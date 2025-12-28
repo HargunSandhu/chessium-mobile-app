@@ -27,12 +27,10 @@ const ChooseAiLevel = () => {
 
   return (
     <SafeAreaView style={styles.main}>
-      {/* Background Pieces */}
       <Image source={{ uri: Images.rook }} style={styles.rook} />
       <Image source={{ uri: Images.king }} style={styles.king} />
       <Image source={{ uri: Images.knight }} style={styles.knight} />
 
-      {/* Header */}
       <View style={styles.headerContainer}>
         <TouchableOpacity
           onPress={() => router.navigate("/pages/Dashboard")}
@@ -46,7 +44,6 @@ const ChooseAiLevel = () => {
         <Text style={styles.heading}>Choose AI Level</Text>
       </View>
 
-      {/* Buttons */}
       {levels.map((item, index) => (
         <TouchableOpacity
           key={index}

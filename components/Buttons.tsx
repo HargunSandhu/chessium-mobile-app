@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
   },
 
   secondaryText: {
-    color: "#cbd5e1",
+    color: "#fff",
     fontSize: 18,
     fontFamily: "Inter_600SemiBold",
   },

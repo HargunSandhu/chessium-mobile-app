@@ -155,8 +155,8 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
   },
   knightIcon: {
-    width: 65,
-    height: 65,
+    width: 50,
+    height: 50,
     resizeMode: "contain",
   },
 });
