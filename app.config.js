@@ -18,7 +18,7 @@ export default ({ config }) => ({
   android: {
     package: "com.anonymous.chessium",
     adaptiveIcon: {
-      backgroundColor: "#E6F4FE"   // keep only background color
+      backgroundColor: "#E6F4FE"
     },
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
@@ -43,8 +43,6 @@ export default ({ config }) => ({
         },
       },
     ],
-    "expo-font",
-    "expo-video",
   ],
 
   experiments: {

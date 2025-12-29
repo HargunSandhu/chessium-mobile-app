@@ -57,15 +57,29 @@ const SignIn = () => {
         value={password}
         onChangeText={setPassword}
       />
-      <View style={{ width: "100%", marginTop: 30 }}>
+      <View style={{ width: "90%", marginTop: 30 }}>
         <Button1 text="Sign In" onPress={signInHandler} />
       </View>
-      <Button2 text="Sign In with Google" imagePath={Images.google} />
-      <Button2 text="Continue as a Guest" />
+      <View
+        style={{
+          width: "100%",
+          marginTop: 10,
+          marginBottom: 10,
+          alignItems: "center",
+        }}
+      >
+        <Button2
+          text="Sign In with Google"
+          imagePath={Images.google}
+          width={"90%"}
+        />
+      </View>
+      <Button2 text="Continue as a Guest" width={"90%"} />
       <TouchableOpacity
         onPress={() => {
           router.navigate("/pages/authentication/ForgotPassword");
         }}
+        style={{ marginTop: 20 }}
       >
         <Text style={styles.text}>Forgot Password?</Text>
       </TouchableOpacity>

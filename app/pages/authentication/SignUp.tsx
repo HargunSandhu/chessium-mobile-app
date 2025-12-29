@@ -63,13 +63,26 @@ const SignUp = () => {
         value={password}
         onChangeText={setPassword}
       />
-      <View style={{ width: "100%", marginTop: 30 }}>
+      <View style={{ width: "90%", marginTop: 30 }}>
         <Button1 text="Sign Up" onPress={signUpHandler} />
       </View>
-      <Button2 text="Continue with Google" imagePath={Images.google} />
-      <Button2 text="Continue as a Guest" />
       <View
-        style={{ flexDirection: "row", alignItems: "center", marginTop: 10 }}
+        style={{
+          width: "100%",
+          marginTop: 10,
+          marginBottom: 10,
+          alignItems: "center",
+        }}
+      >
+        <Button2
+          text="Continue with Google"
+          imagePath={Images.google}
+          width={"90%"}
+        />
+      </View>
+      <Button2 text="Continue as a Guest" width={"90%"} />
+      <View
+        style={{ flexDirection: "row", alignItems: "center", marginTop: 15 }}
       >
         <Text style={styles.text}>Already have an account? </Text>
         <TouchableOpacity

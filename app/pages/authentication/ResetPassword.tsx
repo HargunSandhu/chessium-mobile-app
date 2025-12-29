@@ -65,7 +65,7 @@ const ResetPassword = () => {
         secureTextEntry
       />
 
-      <Button1 text="Confirm" onPress={resetPasswordHandler} />
+      <Button1 text="Confirm" onPress={resetPasswordHandler} width={"90%"} />
     </SafeAreaView>
   );
 };

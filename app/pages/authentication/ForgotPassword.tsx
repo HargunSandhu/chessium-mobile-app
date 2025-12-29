@@ -63,13 +63,14 @@ const ForgotPassword = () => {
         keyboardType="email-address"
       />
 
-      <View style={{ width: "100%", marginBottom: 5 }}>
+      <View style={{ width: "90%", marginBottom: 10 }}>
         <Button1 text="Send OTP" onPress={forgotPasswordHandler} />
       </View>
 
       <Button2
         text="Back to Sign In"
         onPress={() => router.push("/pages/authentication/SignIn")}
+        width={"90%"}
       />
     </SafeAreaView>
   );

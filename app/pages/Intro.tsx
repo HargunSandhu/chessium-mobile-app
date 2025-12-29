@@ -87,8 +87,8 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium_Italic",
   },
   btnContainer: {
-    width: "100%",
-    marginTop: 40,
+    width: "90%",
+    marginTop: 20,
     alignItems: "flex-end",
   },
 });
