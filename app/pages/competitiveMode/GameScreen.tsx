@@ -1,18 +1,26 @@
 import { useEffect, useState } from "react";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, Text } from "react-native";
 import Chessboard, { DefaultThemes } from "dawikk-chessboard";
 import { Chess } from "chess.js";
 import { useLocalSearchParams } from "expo-router";
 import { supabase } from "@/app/lib/Supabase";
 
 const GameScreen = () => {
-  const { matchId } = useLocalSearchParams<{ matchId: string }>();
+  const params = useLocalSearchParams();
+  const matchId =
+    typeof params.matchId === "string"
+      ? params.matchId
+      : Array.isArray(params.matchId)
+      ? params.matchId[0]
+      : undefined;
 
-  const [fen, setFen] = useState("start");
-  const [chess, setChess] = useState(new Chess());
+  const [fen, setFen] = useState<string | null>(null);
+  const [chess, setChess] = useState<Chess | null>(null);
   const [playerColor, setPlayerColor] = useState<"white" | "black">("white");
 
   useEffect(() => {
+    if (!matchId) return;
+
     let channel: any;
 
     const init = async () => {
@@ -20,7 +28,7 @@ const GameScreen = () => {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (!user || !matchId) return;
+      if (!user) return;
 
       const { data: match } = await supabase
         .from("matches")
@@ -38,11 +46,11 @@ const GameScreen = () => {
         .eq("match_id", matchId)
         .single();
 
-      if (gameState?.fen) {
-        const newChess = new Chess(gameState.fen);
-        setChess(newChess);
-        setFen(gameState.fen);
-      }
+      if (!gameState?.fen) return;
+
+      const initialChess = new Chess(gameState.fen);
+      setChess(initialChess);
+      setFen(gameState.fen);
 
       channel = supabase
         .channel(`game-${matchId}`)
@@ -56,8 +64,8 @@ const GameScreen = () => {
           },
           (payload) => {
             const newFen = payload.new.fen;
-            const newChess = new Chess(newFen);
-            setChess(newChess);
+            const updatedChess = new Chess(newFen);
+            setChess(updatedChess);
             setFen(newFen);
           }
         )
@@ -72,26 +80,38 @@ const GameScreen = () => {
   }, [matchId]);
 
   const onMove = (from: string, to: string, promotion?: string) => {
-    const newChess = new Chess(chess.fen());
+    if (!chess || !matchId) return;
 
-    const result = newChess.move({
-      from,
-      to,
-      promotion,
-    });
+    const next = new Chess(chess.fen());
+    const result = next.move({ from, to, promotion });
 
     if (!result) return;
 
-    setChess(newChess);
-    setFen(newChess.fen());
+    setChess(next);
+    setFen(next.fen());
 
     supabase.functions.invoke("make-move", {
       body: {
         match_id: matchId,
-        fen: newChess.fen(),
+        fen: next.fen(),
       },
     });
   };
+
+  if (!fen || !chess) {
+    return (
+      <SafeAreaView
+        style={{
+          flex: 1,
+          backgroundColor: "#0B0E13",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Text style={{ color: "#fff", fontSize: 18 }}>Loading game...</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#0B0E13" }}>
@@ -100,7 +120,7 @@ const GameScreen = () => {
         onMove={onMove}
         boardTheme={DefaultThemes.blue}
         showCoordinates={false}
-        perspective={playerColor === "white" ? "white" : "black"}
+        perspective={playerColor}
       />
     </SafeAreaView>
   );

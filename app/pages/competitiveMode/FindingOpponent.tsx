@@ -14,14 +14,21 @@ const TIME_MODE_MAP: Record<GameMode, number> = {
 };
 
 const FindingOpponent = () => {
-  const { mode } = useLocalSearchParams<{ mode?: string }>();
-  const normalizedMode = mode?.toLowerCase() as GameMode | undefined;
+  const params = useLocalSearchParams();
+
+  const rawMode =
+    typeof params.mode === "string"
+      ? params.mode
+      : Array.isArray(params.mode)
+      ? params.mode[0]
+      : undefined;
+
+  const normalizedMode = rawMode?.toLowerCase() as GameMode | undefined;
   const timeModeId = normalizedMode ? TIME_MODE_MAP[normalizedMode] : null;
 
   const [userId, setUserId] = useState<string | null>(null);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const channelRef = useRef<any>(null);
   const cancelledRef = useRef(false);
 
   useEffect(() => {
@@ -33,7 +40,6 @@ const FindingOpponent = () => {
       }
       setUserId(data.user.id);
     };
-
     loadUser();
   }, []);
 
@@ -44,11 +50,6 @@ const FindingOpponent = () => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
-    }
-
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
-      channelRef.current = null;
     }
 
     if (userId) {
@@ -75,41 +76,23 @@ const FindingOpponent = () => {
         },
       });
 
-      channelRef.current = supabase
-        .channel(`match-${userId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "matches",
-          },
-          (payload) => {
-            const match = payload.new;
-            if (
-              match.player_white === userId ||
-              match.player_black === userId
-            ) {
-              cleanupAsync();
-              router.replace({
-                pathname: "/pages/competitiveMode/GameScreen",
-                params: { matchId: match.id },
-              });
-            }
-          }
-        )
-        .subscribe();
-
-      intervalRef.current = setInterval(() => {
+      intervalRef.current = setInterval(async () => {
         if (cancelledRef.current) return;
 
-        supabase.functions.invoke("matchmake", {
+        const { data } = await supabase.functions.invoke("matchmake", {
           body: {
-            action: "poll",
+            action: "check",
             user_id: userId,
-            time_mode_id: timeModeId,
           },
         });
+
+        if (data?.match_id) {
+          await cleanupAsync();
+          router.replace({
+            pathname: "/pages/competitiveMode/GameScreen",
+            params: { matchId: data.match_id },
+          });
+        }
       }, 1500);
     };
 
