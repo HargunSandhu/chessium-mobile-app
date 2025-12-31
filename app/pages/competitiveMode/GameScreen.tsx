@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SafeAreaView, Text } from "react-native";
 import Chessboard, { DefaultThemes } from "dawikk-chessboard";
 import { Chess } from "chess.js";
 import { useLocalSearchParams } from "expo-router";
 import { supabase } from "@/app/lib/Supabase";
+
+type Color = "white" | "black";
 
 const GameScreen = () => {
   const params = useLocalSearchParams();
@@ -16,12 +18,13 @@ const GameScreen = () => {
 
   const [fen, setFen] = useState<string | null>(null);
   const [chess, setChess] = useState<Chess | null>(null);
-  const [playerColor, setPlayerColor] = useState<"white" | "black">("white");
+  const [playerColor, setPlayerColor] = useState<Color | null>(null);
+  const [turn, setTurn] = useState<Color | null>(null);
+
+  const channelRef = useRef<any>(null);
 
   useEffect(() => {
     if (!matchId) return;
-
-    let channel: any;
 
     const init = async () => {
       const {
@@ -38,21 +41,21 @@ const GameScreen = () => {
 
       if (!match) return;
 
-      setPlayerColor(match.player_white === user.id ? "white" : "black");
+      setPlayerColor(user.id === match.player_white ? "white" : "black");
 
-      const { data: gameState } = await supabase
+      const { data: state } = await supabase
         .from("game_states")
-        .select("fen")
+        .select("fen, turn")
         .eq("match_id", matchId)
         .single();
 
-      if (!gameState?.fen) return;
+      if (!state) return;
 
-      const initialChess = new Chess(gameState.fen);
-      setChess(initialChess);
-      setFen(gameState.fen);
+      setFen(state.fen);
+      setTurn(state.turn);
+      setChess(new Chess(state.fen));
 
-      channel = supabase
+      channelRef.current = supabase
         .channel(`game-${matchId}`)
         .on(
           "postgres_changes",
@@ -63,10 +66,9 @@ const GameScreen = () => {
             filter: `match_id=eq.${matchId}`,
           },
           (payload) => {
-            const newFen = payload.new.fen;
-            const updatedChess = new Chess(newFen);
-            setChess(updatedChess);
-            setFen(newFen);
+            setFen(payload.new.fen);
+            setTurn(payload.new.turn);
+            setChess(new Chess(payload.new.fen));
           }
         )
         .subscribe();
@@ -75,20 +77,24 @@ const GameScreen = () => {
     init();
 
     return () => {
-      if (channel) supabase.removeChannel(channel);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
   }, [matchId]);
 
+  const canMove = playerColor !== null && turn !== null && playerColor === turn;
+
   const onMove = (from: string, to: string, promotion?: string) => {
-    if (!chess || !matchId) return;
+    if (!chess || !matchId || !canMove) return;
 
     const next = new Chess(chess.fen());
-    const result = next.move({ from, to, promotion });
+    if (!next.move({ from, to, promotion })) return;
 
-    if (!result) return;
-
-    setChess(next);
     setFen(next.fen());
+    setTurn(playerColor === "white" ? "black" : "white");
+    setChess(next);
 
     supabase.functions.invoke("make-move", {
       body: {
@@ -98,7 +104,7 @@ const GameScreen = () => {
     });
   };
 
-  if (!fen || !chess) {
+  if (!fen || !chess || !playerColor || !turn) {
     return (
       <SafeAreaView
         style={{
@@ -115,12 +121,23 @@ const GameScreen = () => {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#0B0E13" }}>
+      <Text
+        style={{
+          color: "#fff",
+          textAlign: "center",
+          marginVertical: 10,
+        }}
+      >
+        {canMove ? "Your Turn" : "Opponent's Turn"}
+      </Text>
+
       <Chessboard
         fen={fen}
         onMove={onMove}
         boardTheme={DefaultThemes.blue}
         showCoordinates={false}
         perspective={playerColor}
+        readonly={!canMove}
       />
     </SafeAreaView>
   );
