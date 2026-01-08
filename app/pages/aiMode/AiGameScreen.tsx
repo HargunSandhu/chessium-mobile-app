@@ -261,7 +261,7 @@ const AiGameScreen = () => {
               <View style={styles.halfBtn}>
                 <Button1
                   text="Resign"
-                  onPress={() => router.replace("/pages/Dashboard")}
+                  onPress={() => router.replace("/pages/Navbar")}
                 />
               </View>
               <View style={styles.halfBtn}>
@@ -313,7 +313,7 @@ const AiGameScreen = () => {
             <View style={{ marginTop: 12 }}>
               <Button2
                 text="Back to Dashboard"
-                onPress={() => router.push("/pages/Dashboard")}
+                onPress={() => router.push("/pages/Navbar")}
               />
             </View>
           </View>

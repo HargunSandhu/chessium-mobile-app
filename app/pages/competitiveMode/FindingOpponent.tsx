@@ -29,90 +29,89 @@ const FindingOpponent = () => {
   const [userId, setUserId] = useState<string | null>(null);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const cancelledRef = useRef(false);
+  const joinedRef = useRef(false);
+  const cancellingRef = useRef(false);
 
   useEffect(() => {
-    const loadUser = async () => {
-      const { data } = await supabase.auth.getUser();
+    supabase.auth.getUser().then(({ data }) => {
       if (!data?.user) {
         router.replace("/pages/authentication/SignIn");
         return;
       }
       setUserId(data.user.id);
-    };
-    loadUser();
+    });
   }, []);
 
-  const cleanupAsync = async () => {
-    if (cancelledRef.current) return;
-    cancelledRef.current = true;
-
+  const stop = () => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
+  };
+
+  const cancel = async () => {
+    if (cancellingRef.current) return;
+    cancellingRef.current = true;
+    stop();
+    joinedRef.current = false;
 
     if (userId) {
       await supabase.functions.invoke("matchmake", {
-        body: {
-          action: "leave",
-          user_id: userId,
-        },
+        body: { action: "leave", user_id: userId },
       });
     }
+
+    router.back();
   };
 
   useEffect(() => {
-    if (!userId || !timeModeId) return;
+    if (!userId || !timeModeId || joinedRef.current) return;
+    joinedRef.current = true;
 
-    cancelledRef.current = false;
+    supabase.functions.invoke("matchmake", {
+      body: {
+        action: "join",
+        user_id: userId,
+        time_mode_id: timeModeId,
+      },
+    });
 
-    const start = async () => {
-      await supabase.functions.invoke("matchmake", {
+    intervalRef.current = setInterval(async () => {
+      if (cancellingRef.current) return;
+
+      const { data, error } = await supabase.functions.invoke("matchmake", {
         body: {
-          action: "join",
+          action: "check",
           user_id: userId,
           time_mode_id: timeModeId,
         },
       });
 
-      intervalRef.current = setInterval(async () => {
-        if (cancelledRef.current) return;
+      if (error) {
+        stop();
+        joinedRef.current = false;
+        return;
+      }
 
-        const { data } = await supabase.functions.invoke("matchmake", {
-          body: {
-            action: "check",
-            user_id: userId,
-          },
+      if (data?.match_id) {
+        stop();
+        router.replace({
+          pathname: "/pages/competitiveMode/GameScreen",
+          params: { matchId: data.match_id },
         });
-
-        if (data?.match_id) {
-          await cleanupAsync();
-          router.replace({
-            pathname: "/pages/competitiveMode/GameScreen",
-            params: { matchId: data.match_id },
-          });
-        }
-      }, 1500);
-    };
-
-    start();
+      }
+    }, 1500);
 
     return () => {
-      cleanupAsync();
+      stop();
     };
   }, [userId, timeModeId]);
-
-  const cancelMatchmaking = async () => {
-    await cleanupAsync();
-    router.back();
-  };
 
   return (
     <SafeAreaView style={styles.main}>
       <Text style={styles.title}>Player vs Player</Text>
       <Text style={styles.subtitle}>Finding Opponent ({normalizedMode})</Text>
-      <Button2 text="Cancel" width="90%" onPress={cancelMatchmaking} />
+      <Button2 text="Cancel" width="90%" onPress={cancel} />
     </SafeAreaView>
   );
 };

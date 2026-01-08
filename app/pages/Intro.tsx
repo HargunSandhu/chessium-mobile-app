@@ -1,34 +1,50 @@
-import { Text, StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import "react-native-url-polyfill/auto";
 import {
-  useFonts,
-  Inter_700Bold,
-  Inter_600SemiBold,
   Inter_500Medium_Italic,
+  Inter_600SemiBold,
+  Inter_700Bold,
+  useFonts,
 } from "@expo-google-fonts/inter";
-import { Image } from "react-native";
-import { Images } from "../../assets/images/Images";
-import { Button1, Button2 } from "../../components/Buttons";
 import { useRouter } from "expo-router";
+import { Image, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Images } from "../../assets/images/Images";
+import { Button1 } from "../../components/Buttons";
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/Supabase";
 
 export default function Intro() {
   const router = useRouter();
+  const [checkingSession, setCheckingSession] = useState(true);
+
   const [fontsLoaded] = useFonts({
     Inter_700Bold,
     Inter_600SemiBold,
     Inter_500Medium_Italic,
   });
 
-  if (!fontsLoaded) return null;
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        router.replace("/pages/Navbar");
+      } else {
+        setCheckingSession(false);
+      }
+    });
+  }, []);
+
+  if (!fontsLoaded || checkingSession) return null;
 
   return (
     <SafeAreaView style={styles.main}>
       <Text style={styles.heading}>Chessium</Text>
+
       <Image
         source={{ uri: Images.logo_knight }}
         style={styles.img}
         resizeMode="contain"
       />
+
       <View style={styles.sloganContainer}>
         <Text style={styles.slogan}>The Board Awaits </Text>
         <Text style={styles.slogan}>Your Move.</Text>
@@ -40,6 +56,7 @@ export default function Intro() {
           interactive chess app
         </Text>
       </View>
+
       <View style={styles.btnContainer}>
         <Button1
           text="Get Started"

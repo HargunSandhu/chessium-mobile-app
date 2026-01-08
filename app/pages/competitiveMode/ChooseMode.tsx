@@ -34,7 +34,7 @@ const ChooseMode = () => {
 
       <View style={styles.headerContainer}>
         <TouchableOpacity
-          onPress={() => router.replace("/pages/Dashboard")}
+          onPress={() => router.replace("/pages/Navbar")}
           activeOpacity={0.8}
           style={styles.backButton}
         >

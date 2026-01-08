@@ -35,7 +35,7 @@ const SignIn = () => {
       const user = data.user;
       const session = data.session;
       console.log("Signed in", user, session);
-      await router.replace("../Dashboard");
+      await router.replace("../Navbar");
     }
   };
 

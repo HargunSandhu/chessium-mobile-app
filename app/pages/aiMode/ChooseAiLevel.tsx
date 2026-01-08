@@ -33,7 +33,7 @@ const ChooseAiLevel = () => {
 
       <View style={styles.headerContainer}>
         <TouchableOpacity
-          onPress={() => router.navigate("/pages/Dashboard")}
+          onPress={() => router.navigate("/pages/Navbar")}
           activeOpacity={0.8}
           style={styles.backWrapper}
         >
