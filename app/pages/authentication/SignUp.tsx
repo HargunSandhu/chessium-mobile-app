@@ -32,6 +32,9 @@ const SignUp = () => {
     const { data, error } = await supabase.auth.signUp({
       email: email,
       password: password,
+      options: {
+        emailRedirectTo: "io.chessium.app://pages/authentication/Name",
+      },
     });
 
     if (error) {
@@ -42,7 +45,7 @@ const SignUp = () => {
     const user = data?.user;
     const session = data?.session;
     console.log("Signed up", user, session);
-    router.navigate("/pages/authentication/SignIn");
+    router.replace("/pages/authentication/SignIn");
   };
 
   return (
@@ -62,6 +65,7 @@ const SignUp = () => {
         style={styles.input}
         value={password}
         onChangeText={setPassword}
+        secureTextEntry
       />
       <View style={{ width: "90%", marginTop: 30 }}>
         <Button1 text="Sign Up" onPress={signUpHandler} />

@@ -35,7 +35,7 @@ const SignIn = () => {
       const user = data.user;
       const session = data.session;
       console.log("Signed in", user, session);
-      await router.replace("../Navbar");
+      await router.replace("/pages/Navbar");
     }
   };
 
@@ -56,6 +56,7 @@ const SignIn = () => {
         style={styles.input}
         value={password}
         onChangeText={setPassword}
+        secureTextEntry
       />
       <View style={{ width: "90%", marginTop: 30 }}>
         <Button1 text="Sign In" onPress={signInHandler} />
