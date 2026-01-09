@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
   },
   playerElo: {
-    color: "#fff",
+    color: "#B3B3B3",
     fontSize: 16,
   },
   timeContainer: {

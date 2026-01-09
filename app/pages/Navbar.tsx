@@ -9,6 +9,7 @@ import Leaderboard from "@/app/pages/Leaderboard";
 import Friends from "@/app/pages/Friends";
 import Menu from "@/app/pages/Menu";
 import { Images } from "@/assets/images/Images";
+import ChooseMode from "./competitiveMode/ChooseMode";
 
 const Tab = createBottomTabNavigator();
 
@@ -78,7 +79,8 @@ const Navbar = () => {
 
       <Tab.Screen
         name="Knight"
-        component={Dashboard}
+        component={ChooseMode}
+        
         options={{
           tabBarButton: () => (
             <View style={styles.centerButtonWrapper}>
@@ -95,6 +97,7 @@ const Navbar = () => {
               </LinearGradient>
             </View>
           ),
+
         }}
       />
 

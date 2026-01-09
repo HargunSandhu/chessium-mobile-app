@@ -1,3 +1,4 @@
+import { supabase } from "@/app/lib/Supabase";
 import { Images } from "@/assets/images/Images";
 import {
   Inter_400Regular,
@@ -6,11 +7,15 @@ import {
 } from "@expo-google-fonts/inter";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import { TouchableOpacity } from "react-native-gesture-handler";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const ChooseMode = () => {
+  const [bulletElo, setBulletElo] = useState<number | null>(null);
+  const [blitzElo, setBlitzElo] = useState<number | null>(null);
+  const [rapidElo, setRapidElo] = useState<number | null>(null);
   const [fontsLoaded] = useFonts({
     Inter_600SemiBold,
     Inter_400Regular,
@@ -18,12 +23,58 @@ const ChooseMode = () => {
 
   const router = useRouter();
 
-  if (!fontsLoaded) return null;
+  useEffect(() => {
+    const loadElo = async () => {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
 
+      if (userError || !user) {
+        console.error("User not found", userError);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("bullet_elo, blitz_elo, rapid_elo")
+        .eq("id", user.id)
+        .single();
+
+      if (error) {
+        console.error("Error fetching ELO:", error);
+        return;
+      }
+
+      setBulletElo(data?.bullet_elo);
+      setBlitzElo(data?.blitz_elo);
+      setRapidElo(data?.rapid_elo);
+    };
+
+    loadElo();
+  }, []);
   const modes = [
-    { mode: 1, title: "Bullet", time: "1 min", icon: Images.bullet },
-    { mode: 2, title: "Blitz", time: "3 min", icon: Images.blitz },
-    { mode: 3, title: "Rapid", time: "10 min", icon: Images.rapid },
+    {
+      mode: 1,
+      title: "Bullet",
+      time: "1 min",
+      icon: Images.bullet,
+      elo: bulletElo,
+    },
+    {
+      mode: 2,
+      title: "Blitz",
+      time: "3 min",
+      icon: Images.blitz,
+      elo: blitzElo,
+    },
+    {
+      mode: 3,
+      title: "Rapid",
+      time: "10 min",
+      icon: Images.rapid,
+      elo: rapidElo,
+    },
   ];
 
   return (
@@ -59,14 +110,13 @@ const ChooseMode = () => {
                 pathname: "/pages/competitiveMode/FindingOpponent",
                 params: { mode: item.title },
               });
-              console.log("MODE SENT →", item.title, typeof item.title);
             }}
           >
             <View style={styles.card}>
               <View>
                 <Text style={styles.title}>{item.title}</Text>
                 <Text style={styles.time}>{item.time}</Text>
-                <Text style={styles.elo}>1500</Text>
+                <Text style={styles.elo}>{item.elo}</Text>
               </View>
 
               <View style={styles.rightIcons}>
