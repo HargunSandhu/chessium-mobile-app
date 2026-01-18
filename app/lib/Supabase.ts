@@ -4,6 +4,7 @@ import Constants from "expo-constants";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const { supabaseUrl, supabaseAnonKey } = Constants.expoConfig?.extra || {};
+export const SUPABASE_URL = supabaseUrl;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error("Supabase environment variables are missing!");

@@ -8,11 +8,10 @@ import { Inter_600SemiBold, useFonts } from "@expo-google-fonts/inter";
 import { useRouter } from "expo-router";
 
 const Header = () => {
-  const [fontsLoaded] = useFonts({
+  useFonts({
     Inter_600SemiBold,
   });
 
-  if (!fontsLoaded) return null;
   const router = useRouter();
   return (
     <View style={styles.container}>

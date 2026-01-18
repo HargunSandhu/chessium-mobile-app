@@ -30,15 +30,13 @@ const ForgotPassword = () => {
     });
 
     if (error) {
-      console.log("Forgot password error:", error);
+      console.error("Forgot password error:", error);
       Alert.alert("Error", error.message);
     } else {
-      console.log("OTP sent to:", email);
       Alert.alert(
         "Success",
         "A verification code has been sent to your email."
       );
-      // Pass email to VerifyEmail screen
       router.push({
         pathname: "/pages/authentication/VerifyEmail",
         params: { email },

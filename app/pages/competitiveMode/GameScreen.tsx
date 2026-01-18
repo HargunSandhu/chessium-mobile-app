@@ -6,16 +6,16 @@ import {
   TouchableOpacity,
   View,
   Image,
+  Modal,
 } from "react-native";
 import Chessboard, { DefaultThemes } from "dawikk-chessboard";
-import { useLocalSearchParams } from "expo-router";
-import { supabase } from "@/app/lib/Supabase";
+import { useLocalSearchParams, router } from "expo-router";
+import { supabase, SUPABASE_URL } from "@/app/lib/Supabase";
 import { FontAwesome6, Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type Color = "white" | "black";
-type TimeMode = 1 | 2 | 3;
-type EloField = "elo_bullet" | "elo_blitz" | "elo_rapid";
+type GameResult = "win" | "loss" | "draw" | null;
 
 type PlayerInfo = {
   id: string;
@@ -24,62 +24,60 @@ type PlayerInfo = {
   avatar_url?: string | null;
 };
 
-// type ProfileRow = {
-//   id: string;
-//   full_name: string;
-//   elo_bullet: number;
-//   elo_blitz: number;
-//   elo_rapid: number;
-// };
-
-const TIME_MODE_TO_ELO_FIELD: Record<TimeMode, EloField> = {
-  1: "elo_bullet",
-  2: "elo_blitz",
-  3: "elo_rapid",
-};
-
 const GameScreen = () => {
   const params = useLocalSearchParams();
   const matchId =
     typeof params.matchId === "string"
       ? params.matchId
       : Array.isArray(params.matchId)
-      ? params.matchId[0]
-      : undefined;
+        ? params.matchId[0]
+        : undefined;
 
-  console.log("[GameScreen] matchId:", matchId);
+  const BOARD_SIZE = Dimensions.get("window").width;
+
+  const channelRef = useRef<any>(null);
+  const moveLockRef = useRef(false);
 
   const [fen, setFen] = useState<string | null>(null);
   const [playerColor, setPlayerColor] = useState<Color | null>(null);
   const [turn, setTurn] = useState<Color | null>(null);
+
   const [whitePlayer, setWhitePlayer] = useState<PlayerInfo | null>(null);
   const [blackPlayer, setBlackPlayer] = useState<PlayerInfo | null>(null);
 
-  const channelRef = useRef<any>(null);
-  const BOARD_SIZE = Dimensions.get("window").width;
+  const [whiteTime, setWhiteTime] = useState<number | null>(null);
+  const [blackTime, setBlackTime] = useState<number | null>(null);
+  const [activeColor, setActiveColor] = useState<Color | null>(null);
+  const [lastMoveAt, setLastMoveAt] = useState<string | null>(null);
+
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [gameResult, setGameResult] = useState<GameResult>(null);
+  const [drawReason, setDrawReason] = useState<string | null>(null);
 
   useEffect(() => {
     if (!matchId) return;
 
     const init = async () => {
-      console.log("[INIT] start");
-
-      const { data: authData } = await supabase.auth.getUser();
-      const user = authData.user;
-      if (!user) return;
-
-      console.log("[AUTH]", user.id);
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth.user) return;
 
       const { data: match } = await supabase
         .from("matches")
-        .select("player_white, player_black, time_mode_id")
+        .select(
+          "player_white, player_black, time_mode_id, white_time_ms, black_time_ms, active_color, last_move_at"
+        )
         .eq("id", matchId)
         .single();
 
       if (!match) return;
-      console.log("[MATCH]", match);
 
-      setPlayerColor(user.id === match.player_white ? "white" : "black");
+      setPlayerColor(
+        auth.user.id === match.player_white ? "white" : "black"
+      );
+      setWhiteTime(match.white_time_ms);
+      setBlackTime(match.black_time_ms);
+      setActiveColor(match.active_color);
+      setLastMoveAt(match.last_move_at);
 
       const { data: whiteProfile } = await supabase
         .from("profiles")
@@ -93,21 +91,14 @@ const GameScreen = () => {
         .eq("id", match.player_black)
         .maybeSingle();
 
-      if (!whiteProfile || !blackProfile) {
-        console.log("[PROFILES] missing", { whiteProfile, blackProfile });
-        return;
-      }
+      if (!whiteProfile || !blackProfile) return;
 
-      const TIME_MODE_TO_ELO_FIELD: Record<
-        number,
-        "bullet_elo" | "blitz_elo" | "rapid_elo"
-      > = {
-        1: "bullet_elo",
-        2: "blitz_elo",
-        3: "rapid_elo",
-      };
-
-      const eloField = TIME_MODE_TO_ELO_FIELD[match.time_mode_id];
+      const eloField =
+        match.time_mode_id === 1
+          ? "bullet_elo"
+          : match.time_mode_id === 2
+            ? "blitz_elo"
+            : "rapid_elo";
 
       setWhitePlayer({
         id: whiteProfile.id,
@@ -149,6 +140,48 @@ const GameScreen = () => {
             setTurn(payload.new.turn);
           }
         )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "matches",
+            filter: `id=eq.${matchId}`,
+          },
+          (payload) => {
+            setWhiteTime(payload.new.white_time_ms);
+            setBlackTime(payload.new.black_time_ms);
+            setActiveColor(payload.new.active_color);
+            setLastMoveAt(payload.new.last_move_at);
+
+            if (payload.new.status === "finished") {
+              setActiveColor(null);
+
+              const result: string = payload.new.result;
+              const isWhite = playerColor === "white";
+
+              if (result.startsWith("white_win")) {
+                setGameResult(isWhite ? "win" : "loss");
+              } else if (result.startsWith("black_win")) {
+                setGameResult(isWhite ? "loss" : "win");
+              } else if (result.startsWith("draw")) {
+                setGameResult("draw");
+
+                if (result === "draw_stalemate")
+                  setDrawReason("Stalemate");
+                else if (result === "draw_insufficient_material")
+                  setDrawReason("Insufficient material");
+                else if (result === "draw_threefold")
+                  setDrawReason("Threefold repetition");
+                else if (result === "draw_agreement")
+                  setDrawReason("Draw by agreement");
+                else setDrawReason("Draw");
+              }
+
+              setShowResultModal(true);
+            }
+          }
+        )
         .subscribe();
     };
 
@@ -160,17 +193,66 @@ const GameScreen = () => {
         channelRef.current = null;
       }
     };
-  }, [matchId]);
+  }, [matchId, playerColor]);
 
-  if (!fen || !playerColor || !turn || !whitePlayer || !blackPlayer) {
-    console.log("[RENDER] waiting", {
-      fen,
-      playerColor,
-      turn,
-      whitePlayer,
-      blackPlayer,
-    });
+  useEffect(() => {
+    if (!activeColor || !lastMoveAt) return;
 
+    const baseWhite = whiteTime ?? 0;
+    const baseBlack = blackTime ?? 0;
+    const last = new Date(lastMoveAt).getTime();
+
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - last;
+
+      if (activeColor === "white") {
+        setWhiteTime(Math.max(0, baseWhite - elapsed));
+      } else {
+        setBlackTime(Math.max(0, baseBlack - elapsed));
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [activeColor, lastMoveAt]);
+
+  const handleMove = async (from: string, to: string, promotion?: string) => {
+    if (!matchId || moveLockRef.current || !activeColor) return;
+
+    moveLockRef.current = true;
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) return;
+
+      await fetch(`${SUPABASE_URL}/functions/v1/make-move`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ match_id: matchId, from, to, promotion }),
+      });
+    } finally {
+      moveLockRef.current = false;
+    }
+  };
+
+  const formatTime = (ms: number) => {
+    const t = Math.max(0, Math.floor(ms / 1000));
+    const m = Math.floor(t / 60);
+    const s = t % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
+  if (
+    !fen ||
+    !playerColor ||
+    !turn ||
+    !whitePlayer ||
+    !blackPlayer ||
+    whiteTime === null ||
+    blackTime === null
+  ) {
     return (
       <SafeAreaView style={styles.loading}>
         <Text style={styles.loadingText}>Loading game...</Text>
@@ -178,19 +260,17 @@ const GameScreen = () => {
     );
   }
 
-  const canMove = playerColor === turn;
+  const canMove = playerColor === turn && activeColor !== null;
   const topPlayer = playerColor === "white" ? blackPlayer : whitePlayer;
   const bottomPlayer = playerColor === "white" ? whitePlayer : blackPlayer;
 
   return (
     <SafeAreaView style={styles.main}>
+      {/* TOP PLAYER */}
       <View style={styles.playerContainer}>
         <View style={styles.playerRow}>
           {topPlayer.avatar_url ? (
-            <Image
-              source={{ uri: topPlayer.avatar_url }}
-              style={{ width: 48, height: 48, borderRadius: 24 }}
-            />
+            <Image source={{ uri: topPlayer.avatar_url }} style={styles.avatar} />
           ) : (
             <Ionicons name="person-circle-outline" size={48} color="#fff" />
           )}
@@ -200,28 +280,29 @@ const GameScreen = () => {
           </View>
         </View>
         <View style={styles.timeContainer}>
-          <Text style={styles.timeText}>10 : 00</Text>
+          <Text style={styles.timeText}>
+            {formatTime(playerColor === "white" ? blackTime : whiteTime)}
+          </Text>
         </View>
       </View>
 
+      {/* BOARD */}
       <View style={{ width: BOARD_SIZE, height: BOARD_SIZE }}>
         <Chessboard
           fen={fen}
-          onMove={() => {}}
           boardTheme={DefaultThemes.blue}
-          showCoordinates={false}
           perspective={playerColor}
           readonly={!canMove}
+          onMove={handleMove}
+          showCoordinates={false}
         />
       </View>
 
+      {/* BOTTOM PLAYER */}
       <View style={styles.playerContainer}>
         <View style={styles.playerRow}>
           {bottomPlayer.avatar_url ? (
-            <Image
-              source={{ uri: bottomPlayer.avatar_url }}
-              style={{ width: 48, height: 48, borderRadius: 24 }}
-            />
+            <Image source={{ uri: bottomPlayer.avatar_url }} style={styles.avatar} />
           ) : (
             <Ionicons name="person-circle-outline" size={48} color="#fff" />
           )}
@@ -231,10 +312,13 @@ const GameScreen = () => {
           </View>
         </View>
         <View style={styles.timeContainer}>
-          <Text style={styles.timeText}>10 : 00</Text>
+          <Text style={styles.timeText}>
+            {formatTime(playerColor === "white" ? whiteTime : blackTime)}
+          </Text>
         </View>
       </View>
 
+      {/* ACTIONS */}
       <View style={styles.actions}>
         <View style={styles.btnContainer}>
           <TouchableOpacity style={styles.circleBtn}>
@@ -250,10 +334,60 @@ const GameScreen = () => {
           <Text style={styles.btnText}>Offer Draw</Text>
         </View>
       </View>
+
+      {/* RESULT MODAL */}
+      <Modal transparent animationType="fade" visible={showResultModal}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Ionicons
+              name={
+                gameResult === "win"
+                  ? "trophy"
+                  : gameResult === "loss"
+                    ? "skull"
+                    : "remove-circle"
+              }
+              size={48}
+              color={
+                gameResult === "win"
+                  ? "#22c55e"
+                  : gameResult === "loss"
+                    ? "#ef4444"
+                    : "#facc15"
+              }
+              style={{ alignSelf: "center", marginBottom: 12 }}
+            />
+
+            <Text style={styles.modalTitle}>
+              {gameResult === "win"
+                ? "You Won"
+                : gameResult === "loss"
+                  ? "You Lost"
+                  : "Draw"}
+            </Text>
+
+            {gameResult === "draw" && drawReason && (
+              <Text style={styles.modalText}>{drawReason}</Text>
+            )}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.circleBtn, { flex: 1 }]}
+                onPress={() => router.replace("/pages/Navbar")}
+              >
+                <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                  Back to Home
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
 
+/* ---------- STYLES (UNCHANGED) ---------- */
 const styles = StyleSheet.create({
   main: {
     flex: 1,
@@ -269,11 +403,6 @@ const styles = StyleSheet.create({
   loadingText: {
     color: "#fff",
     fontSize: 18,
-  },
-  turnText: {
-    color: "#fff",
-    textAlign: "center",
-    marginVertical: 10,
   },
   playerContainer: {
     borderWidth: 1,
@@ -335,6 +464,42 @@ const styles = StyleSheet.create({
   btnText: {
     color: "#fff",
     marginTop: 6,
+  },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContainer: {
+    width: "85%",
+    backgroundColor: "#0B0E13",
+    padding: 20,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#3b82f6",
+  },
+  modalTitle: {
+    color: "#fff",
+    fontSize: 20,
+    marginBottom: 12,
+    textAlign: "center",
+    fontFamily: "Inter_600SemiBold",
+  },
+  modalText: {
+    color: "#cbd5e1",
+    fontSize: 15,
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 12,
   },
 });
 

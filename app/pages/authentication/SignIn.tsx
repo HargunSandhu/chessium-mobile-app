@@ -30,11 +30,11 @@ const SignIn = () => {
       password: password,
     });
     if (error) {
-      console.log("Sign in error:", error);
+      console.error("Sign in error:", error);
     } else {
       const user = data.user;
       const session = data.session;
-      console.log("Signed in", user, session);
+      // console.log("Signed in", user, session);
       await router.replace("/pages/Navbar");
     }
   };
