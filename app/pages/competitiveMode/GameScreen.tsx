@@ -13,6 +13,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import { supabase, SUPABASE_URL } from "@/app/lib/Supabase";
 import { FontAwesome6, Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Button1 } from "@/components/Buttons";
 
 type Color = "white" | "black";
 type GameResult = "win" | "loss" | "draw" | null;
@@ -37,10 +38,11 @@ const GameScreen = () => {
 
   const channelRef = useRef<any>(null);
   const moveLockRef = useRef(false);
+  const playerColorRef = useRef<Color | null>(null);
 
   const [fen, setFen] = useState<string | null>(null);
-  const [playerColor, setPlayerColor] = useState<Color | null>(null);
   const [turn, setTurn] = useState<Color | null>(null);
+  const [playerColor, setPlayerColor] = useState<Color | null>(null);
 
   const [whitePlayer, setWhitePlayer] = useState<PlayerInfo | null>(null);
   const [blackPlayer, setBlackPlayer] = useState<PlayerInfo | null>(null);
@@ -49,6 +51,7 @@ const GameScreen = () => {
   const [blackTime, setBlackTime] = useState<number | null>(null);
   const [activeColor, setActiveColor] = useState<Color | null>(null);
   const [lastMoveAt, setLastMoveAt] = useState<string | null>(null);
+  const [matchStatus, setMatchStatus] = useState<string | null>(null);
 
   const [showResultModal, setShowResultModal] = useState(false);
   const [gameResult, setGameResult] = useState<GameResult>(null);
@@ -59,25 +62,36 @@ const GameScreen = () => {
 
     const init = async () => {
       const { data: auth } = await supabase.auth.getUser();
+
       if (!auth.user) return;
 
       const { data: match } = await supabase
         .from("matches")
         .select(
-          "player_white, player_black, time_mode_id, white_time_ms, black_time_ms, active_color, last_move_at"
+          "player_white, player_black, time_mode_id, white_time_ms, black_time_ms, active_color, last_move_at, status, result",
         )
         .eq("id", matchId)
         .single();
 
       if (!match) return;
+      setMatchStatus(match.status);
 
-      setPlayerColor(
-        auth.user.id === match.player_white ? "white" : "black"
-      );
+      const myColor = auth.user.id === match.player_white ? "white" : "black";
+
+      setPlayerColor(myColor);
+      playerColorRef.current = myColor;
+
       setWhiteTime(match.white_time_ms);
       setBlackTime(match.black_time_ms);
       setActiveColor(match.active_color);
       setLastMoveAt(match.last_move_at);
+
+      const eloField =
+        match.time_mode_id === 1
+          ? "bullet_elo"
+          : match.time_mode_id === 2
+            ? "blitz_elo"
+            : "rapid_elo";
 
       const { data: whiteProfile } = await supabase
         .from("profiles")
@@ -91,28 +105,23 @@ const GameScreen = () => {
         .eq("id", match.player_black)
         .maybeSingle();
 
-      if (!whiteProfile || !blackProfile) return;
+      if (whiteProfile) {
+        setWhitePlayer({
+          id: whiteProfile.id,
+          name: whiteProfile.full_name,
+          elo: whiteProfile[eloField],
+          avatar_url: whiteProfile.avatar_url,
+        });
+      }
 
-      const eloField =
-        match.time_mode_id === 1
-          ? "bullet_elo"
-          : match.time_mode_id === 2
-            ? "blitz_elo"
-            : "rapid_elo";
-
-      setWhitePlayer({
-        id: whiteProfile.id,
-        name: whiteProfile.full_name,
-        elo: whiteProfile[eloField],
-        avatar_url: whiteProfile.avatar_url,
-      });
-
-      setBlackPlayer({
-        id: blackProfile.id,
-        name: blackProfile.full_name,
-        elo: blackProfile[eloField],
-        avatar_url: blackProfile.avatar_url,
-      });
+      if (blackProfile) {
+        setBlackPlayer({
+          id: blackProfile.id,
+          name: blackProfile.full_name,
+          elo: blackProfile[eloField],
+          avatar_url: blackProfile.avatar_url,
+        });
+      }
 
       const { data: state } = await supabase
         .from("game_states")
@@ -120,10 +129,10 @@ const GameScreen = () => {
         .eq("match_id", matchId)
         .single();
 
-      if (!state) return;
-
-      setFen(state.fen);
-      setTurn(state.turn);
+      if (state) {
+        setFen(state.fen);
+        setTurn(state.turn);
+      }
 
       channelRef.current = supabase
         .channel(`game-${matchId}`)
@@ -138,7 +147,7 @@ const GameScreen = () => {
           (payload) => {
             setFen(payload.new.fen);
             setTurn(payload.new.turn);
-          }
+          },
         )
         .on(
           "postgres_changes",
@@ -155,32 +164,29 @@ const GameScreen = () => {
             setLastMoveAt(payload.new.last_move_at);
 
             if (payload.new.status === "finished") {
-              setActiveColor(null);
+              setMatchStatus("finished");
 
-              const result: string = payload.new.result;
-              const isWhite = playerColor === "white";
+              const isWhite = playerColorRef.current === "white";
+              const result = payload.new.result;
 
               if (result.startsWith("white_win")) {
                 setGameResult(isWhite ? "win" : "loss");
               } else if (result.startsWith("black_win")) {
                 setGameResult(isWhite ? "loss" : "win");
-              } else if (result.startsWith("draw")) {
+              } else {
                 setGameResult("draw");
 
-                if (result === "draw_stalemate")
-                  setDrawReason("Stalemate");
-                else if (result === "draw_insufficient_material")
-                  setDrawReason("Insufficient material");
+                if (result === "draw_stalemate") setDrawReason("Stalemate");
                 else if (result === "draw_threefold")
                   setDrawReason("Threefold repetition");
-                else if (result === "draw_agreement")
-                  setDrawReason("Draw by agreement");
+                else if (result === "draw_insufficient_material")
+                  setDrawReason("Insufficient material");
                 else setDrawReason("Draw");
               }
 
               setShowResultModal(true);
             }
-          }
+          },
         )
         .subscribe();
     };
@@ -193,10 +199,11 @@ const GameScreen = () => {
         channelRef.current = null;
       }
     };
-  }, [matchId, playerColor]);
+  }, [matchId]);
 
   useEffect(() => {
     if (!activeColor || !lastMoveAt) return;
+    if (matchStatus === "finished") return;
 
     const baseWhite = whiteTime ?? 0;
     const baseBlack = blackTime ?? 0;
@@ -212,19 +219,24 @@ const GameScreen = () => {
       }
     }, 1000);
 
-    return () => clearInterval(interval);
-  }, [activeColor, lastMoveAt]);
+    return () => {
+      clearInterval(interval);
+    };
+  }, [activeColor, lastMoveAt, matchStatus]);
 
   const handleMove = async (from: string, to: string, promotion?: string) => {
-    if (!matchId || moveLockRef.current || !activeColor) return;
+    if (!matchId || moveLockRef.current) {
+      return;
+    }
 
     moveLockRef.current = true;
     try {
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
+
       if (!token) return;
 
-      await fetch(`${SUPABASE_URL}/functions/v1/make-move`, {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/make-move`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -244,15 +256,7 @@ const GameScreen = () => {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
-  if (
-    !fen ||
-    !playerColor ||
-    !turn ||
-    !whitePlayer ||
-    !blackPlayer ||
-    whiteTime === null ||
-    blackTime === null
-  ) {
+  if (!fen || !turn || !playerColor) {
     return (
       <SafeAreaView style={styles.loading}>
         <Text style={styles.loadingText}>Loading game...</Text>
@@ -260,33 +264,54 @@ const GameScreen = () => {
     );
   }
 
-  const canMove = playerColor === turn && activeColor !== null;
+  const canMove = playerColor === turn;
+
   const topPlayer = playerColor === "white" ? blackPlayer : whitePlayer;
   const bottomPlayer = playerColor === "white" ? whitePlayer : blackPlayer;
 
+  const handleResign = async () => {
+    if (!matchId) return;
+
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return;
+
+    await fetch(`${SUPABASE_URL}/functions/v1/resign`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ match_id: matchId }),
+    });
+  };
+  const handleOfferDraw = () => { };
   return (
     <SafeAreaView style={styles.main}>
-      {/* TOP PLAYER */}
       <View style={styles.playerContainer}>
         <View style={styles.playerRow}>
-          {topPlayer.avatar_url ? (
-            <Image source={{ uri: topPlayer.avatar_url }} style={styles.avatar} />
+          {topPlayer?.avatar_url ? (
+            <Image
+              source={{ uri: topPlayer.avatar_url }}
+              style={styles.avatar}
+            />
           ) : (
             <Ionicons name="person-circle-outline" size={48} color="#fff" />
           )}
           <View style={styles.playerInfo}>
-            <Text style={styles.playerName}>{topPlayer.name}</Text>
-            <Text style={styles.playerElo}>{topPlayer.elo}</Text>
+            <Text style={styles.playerName}>{topPlayer?.name}</Text>
+            <Text style={styles.playerElo}>{topPlayer?.elo}</Text>
           </View>
         </View>
         <View style={styles.timeContainer}>
           <Text style={styles.timeText}>
-            {formatTime(playerColor === "white" ? blackTime : whiteTime)}
+            {formatTime(
+              playerColor === "white" ? (blackTime ?? 0) : (whiteTime ?? 0),
+            )}
           </Text>
         </View>
       </View>
 
-      {/* BOARD */}
       <View style={{ width: BOARD_SIZE, height: BOARD_SIZE }}>
         <Chessboard
           fen={fen}
@@ -298,44 +323,46 @@ const GameScreen = () => {
         />
       </View>
 
-      {/* BOTTOM PLAYER */}
       <View style={styles.playerContainer}>
         <View style={styles.playerRow}>
-          {bottomPlayer.avatar_url ? (
-            <Image source={{ uri: bottomPlayer.avatar_url }} style={styles.avatar} />
+          {bottomPlayer?.avatar_url ? (
+            <Image
+              source={{ uri: bottomPlayer.avatar_url }}
+              style={styles.avatar}
+            />
           ) : (
             <Ionicons name="person-circle-outline" size={48} color="#fff" />
           )}
           <View style={styles.playerInfo}>
-            <Text style={styles.playerName}>{bottomPlayer.name}</Text>
-            <Text style={styles.playerElo}>{bottomPlayer.elo}</Text>
+            <Text style={styles.playerName}>{bottomPlayer?.name}</Text>
+            <Text style={styles.playerElo}>{bottomPlayer?.elo}</Text>
           </View>
         </View>
         <View style={styles.timeContainer}>
           <Text style={styles.timeText}>
-            {formatTime(playerColor === "white" ? whiteTime : blackTime)}
+            {formatTime(
+              playerColor === "white" ? (whiteTime ?? 0) : (blackTime ?? 0),
+            )}
           </Text>
         </View>
       </View>
 
-      {/* ACTIONS */}
       <View style={styles.actions}>
         <View style={styles.btnContainer}>
-          <TouchableOpacity style={styles.circleBtn}>
+          <TouchableOpacity style={styles.circleBtn} onPress={handleResign}>
             <Ionicons name="flag" size={28} color="#3b82f6" />
           </TouchableOpacity>
           <Text style={styles.btnText}>Resign</Text>
         </View>
 
         <View style={styles.btnContainer}>
-          <TouchableOpacity style={styles.circleBtn}>
+          <TouchableOpacity style={styles.circleBtn} onPress={handleOfferDraw}>
             <FontAwesome6 name="handshake-simple" size={28} color="#3b82f6" />
           </TouchableOpacity>
           <Text style={styles.btnText}>Offer Draw</Text>
         </View>
       </View>
 
-      {/* RESULT MODAL */}
       <Modal transparent animationType="fade" visible={showResultModal}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -371,14 +398,10 @@ const GameScreen = () => {
             )}
 
             <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.circleBtn, { flex: 1 }]}
+              <Button1
+                text="Back to Home"
                 onPress={() => router.replace("/pages/Navbar")}
-              >
-                <Text style={{ color: "#fff", fontWeight: "bold" }}>
-                  Back to Home
-                </Text>
-              </TouchableOpacity>
+              />
             </View>
           </View>
         </View>
@@ -387,7 +410,6 @@ const GameScreen = () => {
   );
 };
 
-/* ---------- STYLES (UNCHANGED) ---------- */
 const styles = StyleSheet.create({
   main: {
     flex: 1,
