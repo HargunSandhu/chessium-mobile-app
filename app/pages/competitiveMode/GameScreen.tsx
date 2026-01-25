@@ -367,6 +367,10 @@ const GameScreen = () => {
 
   const topPlayer = playerColor === "white" ? blackPlayer : whitePlayer;
   const bottomPlayer = playerColor === "white" ? whitePlayer : blackPlayer;
+  const isTopActive =
+    activeColor === (playerColor === "white" ? "black" : "white");
+
+  const isBottomActive = activeColor === playerColor;
 
   const handleResign = async () => {
     if (!matchId) return;
@@ -445,7 +449,9 @@ const GameScreen = () => {
 
   return (
     <SafeAreaView style={styles.main}>
-      <View style={styles.playerContainer}>
+      <View
+        style={[styles.playerContainer, isTopActive && styles.activePlayer]}
+      >
         <View style={styles.playerRow}>
           {topPlayer?.avatar_url ? (
             <Image
@@ -480,7 +486,9 @@ const GameScreen = () => {
         />
       </View>
 
-      <View style={styles.playerContainer}>
+      <View
+        style={[styles.playerContainer, isBottomActive && styles.activePlayer]}
+      >
         <View style={styles.playerRow}>
           {bottomPlayer?.avatar_url ? (
             <Image
@@ -644,7 +652,7 @@ const styles = StyleSheet.create({
   playerContainer: {
     borderWidth: 1,
     borderRadius: 12,
-    borderColor: "#3b82f6",
+    borderColor: "#1F2937",
     width: "90%",
     height: 70,
     paddingHorizontal: 12,
@@ -706,6 +714,14 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
+  },
+  activePlayer: {
+    borderColor: "#3b82f6",
+    shadowColor: "#3b82f6",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    // elevation: 4,
   },
   modalOverlay: {
     flex: 1,
