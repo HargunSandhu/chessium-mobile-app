@@ -13,7 +13,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import { supabase, SUPABASE_URL } from "@/app/lib/Supabase";
 import { FontAwesome6, Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button1 } from "@/components/Buttons";
+import { Button1, Button2 } from "@/components/Buttons";
 
 type Color = "white" | "black";
 type GameResult = "win" | "loss" | "draw" | null;
@@ -54,8 +54,12 @@ const GameScreen = () => {
   const [matchStatus, setMatchStatus] = useState<string | null>(null);
 
   const [showResultModal, setShowResultModal] = useState(false);
+  const [showResignConfirmModal, setShowResignConfirmModal] = useState(false);
   const [gameResult, setGameResult] = useState<GameResult>(null);
   const [drawReason, setDrawReason] = useState<string | null>(null);
+  const [drawOfferedByMe, setDrawOfferedByMe] = useState(false);
+  const [drawOfferedByOpponent, setDrawOfferedByOpponent] = useState(false);
+  const [showDrawModal, setShowDrawModal] = useState(false);
 
   useEffect(() => {
     if (!matchId) return;
@@ -68,13 +72,22 @@ const GameScreen = () => {
       const { data: match } = await supabase
         .from("matches")
         .select(
-          "player_white, player_black, time_mode_id, white_time_ms, black_time_ms, active_color, last_move_at, status, result",
+          "player_white, player_black, time_mode_id, white_time_ms, black_time_ms, active_color, last_move_at, status, result, draw_offer_by",
         )
         .eq("id", matchId)
         .single();
 
       if (!match) return;
       setMatchStatus(match.status);
+
+      if (match.draw_offer_by) {
+        if (match.draw_offer_by === auth.user.id) {
+          setDrawOfferedByMe(true);
+        } else {
+          setDrawOfferedByOpponent(true);
+          setShowDrawModal(true);
+        }
+      }
 
       const myColor = auth.user.id === match.player_white ? "white" : "black";
 
@@ -158,22 +171,35 @@ const GameScreen = () => {
             filter: `id=eq.${matchId}`,
           },
           (payload) => {
-            setWhiteTime(payload.new.white_time_ms);
-            setBlackTime(payload.new.black_time_ms);
-            setActiveColor(payload.new.active_color);
-            setLastMoveAt(payload.new.last_move_at);
+            const updated = payload.new;
 
-            if (payload.new.status === "finished") {
+            setWhiteTime(updated.white_time_ms);
+            setBlackTime(updated.black_time_ms);
+            setActiveColor(updated.active_color);
+            setLastMoveAt(updated.last_move_at);
+
+            if (updated.draw_offer_by) {
+              setDrawOfferedByMe(updated.draw_offer_by === auth.user.id);
+              setDrawOfferedByOpponent(updated.draw_offer_by !== auth.user.id);
+              setShowDrawModal(updated.draw_offer_by !== auth.user.id);
+            } else {
+              setDrawOfferedByMe(false);
+              setDrawOfferedByOpponent(false);
+              setShowDrawModal(false);
+            }
+
+            if (updated.status === "finished") {
+              if (showResultModal) return;
               setMatchStatus("finished");
 
               const isWhite = playerColorRef.current === "white";
-              const result = payload.new.result;
+              const result = updated.result;
 
-              if (result.startsWith("white_win")) {
+              if (result.startsWith("white_win"))
                 setGameResult(isWhite ? "win" : "loss");
-              } else if (result.startsWith("black_win")) {
+              else if (result.startsWith("black_win"))
                 setGameResult(isWhite ? "loss" : "win");
-              } else {
+              else {
                 setGameResult("draw");
 
                 if (result === "draw_stalemate") setDrawReason("Stalemate");
@@ -181,6 +207,8 @@ const GameScreen = () => {
                   setDrawReason("Threefold repetition");
                 else if (result === "draw_insufficient_material")
                   setDrawReason("Insufficient material");
+                else if (result === "draw_agreed")
+                  setDrawReason("Draw by agreement");
                 else setDrawReason("Draw");
               }
 
@@ -188,6 +216,7 @@ const GameScreen = () => {
             }
           },
         )
+
         .subscribe();
     };
 
@@ -223,6 +252,76 @@ const GameScreen = () => {
       clearInterval(interval);
     };
   }, [activeColor, lastMoveAt, matchStatus]);
+  useEffect(() => {
+    if (!matchId) return;
+
+    const channel = supabase
+      .channel(`match-${matchId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "matches",
+          filter: `id=eq.${matchId}`,
+        },
+        (payload) => {
+          const updated = payload.new;
+
+          if (updated.status === "finished") {
+            setMatchStatus("finished");
+
+            const isWhite = playerColorRef.current === "white";
+
+            if (updated.result.startsWith("white_win")) {
+              setGameResult(isWhite ? "win" : "loss");
+            } else if (updated.result.startsWith("black_win")) {
+              setGameResult(isWhite ? "loss" : "win");
+            } else {
+              setGameResult("draw");
+
+              if (updated.result === "draw_stalemate")
+                setDrawReason("Stalemate");
+              else if (updated.result === "draw_threefold")
+                setDrawReason("Threefold repetition");
+              else if (updated.result === "draw_insufficient_material")
+                setDrawReason("Insufficient material");
+              else if (updated.result === "draw_agreed")
+                setDrawReason("Draw by agreement");
+              else setDrawReason("Draw");
+            }
+
+            setShowResultModal(true);
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [matchId]);
+
+  useEffect(() => {
+    if (!matchId || matchStatus === "finished") return;
+
+    const interval = setInterval(async () => {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) return;
+
+      await fetch(`${SUPABASE_URL}/functions/v1/check-timeout`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ match_id: matchId }),
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [matchId, matchStatus]);
 
   const handleMove = async (from: string, to: string, promotion?: string) => {
     if (!matchId || moveLockRef.current) {
@@ -264,7 +363,7 @@ const GameScreen = () => {
     );
   }
 
-  const canMove = playerColor === turn;
+  const canMove = playerColor === turn && matchStatus === "active";
 
   const topPlayer = playerColor === "white" ? blackPlayer : whitePlayer;
   const bottomPlayer = playerColor === "white" ? whitePlayer : blackPlayer;
@@ -285,7 +384,65 @@ const GameScreen = () => {
       body: JSON.stringify({ match_id: matchId }),
     });
   };
-  const handleOfferDraw = () => { };
+  const handleOfferDraw = async () => {
+    if (!matchId || drawOfferedByMe) return;
+
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return;
+
+    setDrawOfferedByMe(true);
+
+    await fetch(`${SUPABASE_URL}/functions/v1/offer-draw`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ match_id: matchId }),
+    });
+  };
+
+  const handleAcceptDraw = async () => {
+    setShowDrawModal(false);
+
+    if (!matchId) {
+      return;
+    }
+
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+
+    if (!token) return;
+
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/accept-draw`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ match_id: matchId }),
+    });
+  };
+  const handleDeclineDraw = async () => {
+    if (!matchId) return;
+
+    setShowDrawModal(false);
+
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return;
+
+    await fetch(`${SUPABASE_URL}/functions/v1/decline-draw`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ match_id: matchId }),
+    });
+  };
+
   return (
     <SafeAreaView style={styles.main}>
       <View style={styles.playerContainer}>
@@ -349,19 +506,77 @@ const GameScreen = () => {
 
       <View style={styles.actions}>
         <View style={styles.btnContainer}>
-          <TouchableOpacity style={styles.circleBtn} onPress={handleResign}>
+          <TouchableOpacity
+            style={styles.circleBtn}
+            onPress={() => setShowResignConfirmModal(true)}
+          >
             <Ionicons name="flag" size={28} color="#3b82f6" />
           </TouchableOpacity>
           <Text style={styles.btnText}>Resign</Text>
         </View>
 
         <View style={styles.btnContainer}>
-          <TouchableOpacity style={styles.circleBtn} onPress={handleOfferDraw}>
+          <TouchableOpacity
+            style={styles.circleBtn}
+            onPress={handleOfferDraw}
+            disabled={drawOfferedByMe || matchStatus !== "active"}
+          >
             <FontAwesome6 name="handshake-simple" size={28} color="#3b82f6" />
           </TouchableOpacity>
           <Text style={styles.btnText}>Offer Draw</Text>
         </View>
       </View>
+
+      <Modal transparent animationType="fade" visible={showResignConfirmModal}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Confirm Resign</Text>
+            <Text style={styles.modalText}>
+              Are you sure you want to resign?
+            </Text>
+            <View style={styles.modalActions}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  gap: 12,
+                  width: "100%",
+                  justifyContent: "center",
+                }}
+              >
+                <Button1
+                  text="Resign"
+                  onPress={() => {
+                    handleResign();
+                    setShowResignConfirmModal(false);
+                  }}
+                  width={"40%"}
+                />
+                <Button2
+                  text="Cancel"
+                  onPress={() => setShowResignConfirmModal(false)}
+                  width={"40%"}
+                />
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal transparent animationType="fade" visible={showDrawModal}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Draw Offered</Text>
+            <Text style={styles.modalText}>
+              Your opponent is offering a draw.
+            </Text>
+
+            <View style={{ flexDirection: "row", gap: 12 }}>
+              <Button1 text="Accept" onPress={handleAcceptDraw} width="45%" />
+              <Button2 text="Decline" onPress={handleDeclineDraw} width="45%" />
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal transparent animationType="fade" visible={showResultModal}>
         <View style={styles.modalOverlay}>
