@@ -8,6 +8,7 @@ import {
   Text,
   FlatList,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -45,7 +46,7 @@ const AddFriend = () => {
         },
       );
       const data = await res.json();
-      setSuggestions(data);
+      setSuggestions(data ?? []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -77,7 +78,12 @@ const AddFriend = () => {
     return (
       <View style={styles.playerContainer}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-          <Ionicons name="person-circle-outline" size={50} color="#fff" />
+          {item.avatar_url ? (
+            <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
+          ) : (
+            <Ionicons name="person-circle-outline" size={50} color="#fff" />
+          )}
+
           <View>
             <Text style={styles.playerName}>{item.full_name || "Player"}</Text>
             <Text
@@ -98,7 +104,7 @@ const AddFriend = () => {
             end={{ x: 1, y: 0 }}
             style={styles.btn}
           >
-            <Ionicons name="paper-plane" size={24} color="#fff" />
+            <Ionicons name="paper-plane" size={22} color="#fff" />
           </LinearGradient>
         </TouchableOpacity>
       </View>
@@ -119,8 +125,6 @@ const AddFriend = () => {
           <LinearGradient
             colors={["#3B82F6", "#2563EB", "#1E3A8A"]}
             style={styles.searchButton}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
           >
             <Ionicons name="search" size={22} color="#fff" />
           </LinearGradient>
@@ -197,6 +201,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     borderRadius: 12,
     alignSelf: "center",
+  },
+  avatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
   },
   playerName: {
     color: "#FFFFFF",
