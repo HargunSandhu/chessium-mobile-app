@@ -36,7 +36,7 @@ const Menu = () => {
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.btn}
-          onPress={() => router.push("/pages/Tournament")}
+          onPress={() => router.push("/pages/tournament/ChooseTournament")}
         >
           <Ionicons color={"#fff"} name="trophy" size={28} />
           <Text style={styles.txt}>Tournaments</Text>
