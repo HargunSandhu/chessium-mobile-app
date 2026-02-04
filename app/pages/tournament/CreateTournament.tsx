@@ -22,6 +22,7 @@ import DateTimePicker, {
   DateTimePickerAndroid,
 } from "@react-native-community/datetimepicker";
 import { useState } from "react";
+import { supabase } from "@/app/lib/Supabase";
 
 const CreateTournament = () => {
   const router = useRouter();
@@ -36,6 +37,9 @@ const CreateTournament = () => {
   const [timeControl, setTimeControl] = useState<"bullet" | "blitz" | "rapid">(
     "blitz",
   );
+
+  const [tournamentName, setTournamentName] = useState("");
+  const [maxPlayers, setMaxPlayers] = useState<number>();
 
   useFonts({
     Inter_600SemiBold,
@@ -73,6 +77,52 @@ const CreateTournament = () => {
     } else {
       setShowIOSPicker(true);
     }
+  };
+
+  const handleCreateTournament = async () => {
+    if (!tournamentName.trim()) {
+      alert("Tournament name is required");
+      return;
+    }
+
+    if (!date) {
+      alert("Please select start date & time");
+      return;
+    }
+
+    if (!maxPlayers || maxPlayers < 2) {
+      alert("Minimum players should be 2");
+      return;
+    }
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      alert("User not logged in");
+      return;
+    }
+
+    const { error } = await supabase.from("tournaments").insert({
+      name: tournamentName,
+      tournament_type: tournamentType,
+      time_control: timeControl,
+      start_time: date.toISOString(),
+      max_players: maxPlayers,
+      creator_id: user.id,
+      status: "upcoming",
+    });
+
+    if (error) {
+      console.log(error);
+      alert("Failed to create tournament");
+      return;
+    }
+
+    alert("Tournament created successfully");
+    router.back();
   };
 
   return (
@@ -164,6 +214,8 @@ const CreateTournament = () => {
             placeholder="Tournament Name"
             placeholderTextColor="#757575"
             style={styles.input}
+            value={tournamentName}
+            onChangeText={setTournamentName}
           />
 
           <Pressable style={styles.dateInputWrapper} onPress={openPicker}>
@@ -180,11 +232,24 @@ const CreateTournament = () => {
             placeholderTextColor="#757575"
             style={styles.input}
             keyboardType="number-pad"
+            value={maxPlayers ? maxPlayers.toString() : ""}
+            onChangeText={(text) => {
+              const num = parseInt(text, 10);
+              if (!isNaN(num)) {
+                setMaxPlayers(num);
+              } else {
+                setMaxPlayers(undefined);
+              }
+            }}
           />
         </ScrollView>
 
         <View style={styles.bottomButton}>
-          <Button1 text="Create Tournament" width={"90%"} onPress={() => {}} />
+          <Button1
+            text="Create Tournament"
+            width={"90%"}
+            onPress={handleCreateTournament}
+          />
         </View>
 
         {Platform.OS === "ios" && showIOSPicker && (
