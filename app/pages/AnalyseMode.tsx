@@ -79,7 +79,7 @@ const AnalyseMode = () => {
     <SafeAreaView style={styles.main}>
       <View style={styles.headerContainer}>
         <TouchableOpacity
-          onPress={() => router.navigate("/pages/Navbar")}
+          onPress={() => router.back()}
           activeOpacity={0.8}
           style={styles.backWrapper}
         >
