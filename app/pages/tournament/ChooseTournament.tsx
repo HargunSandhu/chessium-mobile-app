@@ -9,7 +9,7 @@ const ChooseTournament = () => {
     <SafeAreaView style={styles.main}>
       <View style={styles.headerContainer}>
         <TouchableOpacity
-          onPress={() => router.navigate("/pages/Navbar")}
+          onPress={() => router.back()}
           activeOpacity={0.8}
           style={styles.backWrapper}
         >
@@ -38,6 +38,24 @@ const ChooseTournament = () => {
           <Text style={styles.btnText}>Create a Tournament</Text>
           <Ionicons name="create-outline" size={28} color="#fff" />
         </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.btnContainer}
+          onPress={() => {
+            router.navigate("/pages/tournament/TournamentsJoined");
+          }}
+        >
+          <Text style={styles.btnText}>Tournaments Joined</Text>
+          <Ionicons name="people-outline" size={28} color="#fff" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.btnContainer}
+          onPress={() => {
+            router.navigate("/pages/tournament/MyTournaments");
+          }}
+        >
+          <Text style={styles.btnText}>My Tournaments</Text>
+          <Ionicons name="trophy-outline" size={28} color="#fff" />
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -52,7 +70,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 40,
+    marginVertical: 40,
     gap: 10,
   },
 
@@ -84,7 +102,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignSelf: "center",
-    gap: 30,
+    // gap: 10,
     borderWidth: 1,
     borderColor: "#3B82F6",
     padding: 30,
