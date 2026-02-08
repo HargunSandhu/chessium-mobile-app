@@ -9,6 +9,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -20,10 +21,38 @@ const TournamentLobby = () => {
   const [players, setPlayers] = useState<any[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [isCreator, setIsCreator] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (!tournamentId) return;
+
     init();
-  }, []);
+
+    const channel = supabase
+      .channel(`tournament-${tournamentId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "tournaments",
+          filter: `id=eq.${tournamentId}`,
+        },
+        (payload) => {
+          if (payload.new.status === "ongoing") {
+            router.replace({
+              pathname: "/pages/tournament/Bracket",
+              params: { tournamentId },
+            });
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [tournamentId]);
 
   const init = async () => {
     const {
@@ -40,9 +69,17 @@ const TournamentLobby = () => {
       .eq("id", tournamentId)
       .single();
 
-    if (tournamentData) {
-      setTournament(tournamentData);
-      setIsCreator(tournamentData.creator_id === user.id);
+    if (!tournamentData) return;
+
+    setTournament(tournamentData);
+    setIsCreator(tournamentData.creator_id === user.id);
+
+    if (tournamentData.status === "ongoing") {
+      router.replace({
+        pathname: "/pages/tournament/Bracket",
+        params: { tournamentId },
+      });
+      return;
     }
 
     fetchPlayers();
@@ -70,10 +107,19 @@ const TournamentLobby = () => {
   };
 
   const startTournament = async () => {
-    await supabase
-      .from("tournaments")
-      .update({ status: "ongoing" })
-      .eq("id", tournamentId);
+    if (!isCreator || loading) return;
+
+    setLoading(true);
+
+    const { error } = await supabase.functions.invoke("start-tournament", {
+      body: { tournamentId },
+    });
+
+    setLoading(false);
+
+    if (error) {
+      Alert.alert("Error", error.message);
+    }
   };
 
   const formatText = (text: string) =>
@@ -129,9 +175,13 @@ const TournamentLobby = () => {
         {isCreator && (
           <View style={styles.bottomBar}>
             <Button1
-              text={`Start Tournament${
-                notReadyCount > 0 ? ` (${notReadyCount} not ready)` : ""
-              }`}
+              text={
+                loading
+                  ? "Starting..."
+                  : `Start Tournament${
+                      notReadyCount > 0 ? ` (${notReadyCount} not ready)` : ""
+                    }`
+              }
               onPress={startTournament}
               width="100%"
             />
@@ -143,10 +193,7 @@ const TournamentLobby = () => {
 };
 
 const styles = StyleSheet.create({
-  main: {
-    flex: 1,
-    backgroundColor: "#0B0E13",
-  },
+  main: { flex: 1, backgroundColor: "#0B0E13" },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -162,11 +209,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  heading: {
-    color: "#fff",
-    fontSize: 26,
-    fontFamily: "Inter_600SemiBold",
-  },
+  heading: { color: "#fff", fontSize: 26, fontFamily: "Inter_600SemiBold" },
   infoCard: {
     width: "90%",
     alignSelf: "center",
@@ -177,11 +220,7 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 20,
   },
-  title: {
-    color: "#fff",
-    fontSize: 22,
-    fontFamily: "Inter_600SemiBold",
-  },
+  title: { color: "#fff", fontSize: 22, fontFamily: "Inter_600SemiBold" },
   sub: {
     color: "#B3B3B3",
     fontSize: 16,
@@ -212,11 +251,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 10,
   },
-  playerText: {
-    color: "#fff",
-    fontSize: 16,
-    fontFamily: "Inter_400Regular",
-  },
+  playerText: { color: "#fff", fontSize: 16, fontFamily: "Inter_400Regular" },
   readyBtn: {
     width: "90%",
     alignSelf: "center",
