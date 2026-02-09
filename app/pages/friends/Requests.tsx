@@ -10,10 +10,12 @@ import {
   Image,
 } from "react-native";
 import { supabase } from "@/app/lib/Supabase";
+import { useRouter } from "expo-router";
 
 const Requests = () => {
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
     fetchRequests();
@@ -85,13 +87,23 @@ const Requests = () => {
     setRequests((prev) => prev.filter((r) => r.user_id !== senderId));
   };
 
+  const handleViewProfile = (profileId: string) => {
+    router.push({
+      pathname: "/pages/OthersProfile",
+      params: { userId: profileId },
+    });
+  };
+
   const renderItem = ({ item }: { item: any }) => {
     const profile = item.sender;
     const isOnline = profile?.user_status === "online";
 
     return (
       <View style={styles.playerContainer}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        <TouchableOpacity
+          onPress={() => handleViewProfile(profile.id)}
+          style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+        >
           {profile?.avatar_url ? (
             <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
           ) : (
@@ -111,7 +123,7 @@ const Requests = () => {
               {isOnline ? "Online" : "Offline"}
             </Text>
           </View>
-        </View>
+        </TouchableOpacity>
 
         <View style={{ flexDirection: "row", gap: 10 }}>
           <TouchableOpacity

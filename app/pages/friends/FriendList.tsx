@@ -141,9 +141,19 @@ const FriendList = () => {
     const profile = item.profile;
     const isOnline = profile?.user_status === "online";
 
+    const handleViewProfile = (profileId: string) => {
+      router.push({
+        pathname: "/pages/OthersProfile",
+        params: { userId: profileId },
+      });
+    };
+
     return (
       <View style={styles.playerContainer}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        <TouchableOpacity
+          onPress={() => handleViewProfile(profile.id)}
+          style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+        >
           {profile?.avatar_url ? (
             <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
           ) : (
@@ -163,8 +173,7 @@ const FriendList = () => {
               {isOnline ? "Online" : "Offline"}
             </Text>
           </View>
-        </View>
-
+        </TouchableOpacity>
         <View style={{ flexDirection: "row", gap: 10 }}>
           <TouchableOpacity style={styles.btn}>
             <Ionicons

@@ -17,11 +17,13 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { supabase, SUPABASE_URL } from "@/app/lib/Supabase";
+import { useRouter } from "expo-router";
 
 const AddFriend = () => {
   const [username, setUsername] = useState("");
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
   useFonts({ Inter_600SemiBold, Inter_400Regular });
 
@@ -72,12 +74,23 @@ const AddFriend = () => {
     }
   };
 
+  // Navigate to OthersProfile screen
+  const handleViewProfile = (profileId: string) => {
+    router.push({
+      pathname: "/pages/OthersProfile",
+      params: { userId: profileId },
+    });
+  };
+
   const renderPlayer = ({ item }: { item: any }) => {
     const isOnline = item.user_status === "online";
 
     return (
       <View style={styles.playerContainer}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        <TouchableOpacity
+          onPress={() => handleViewProfile(item.id)}
+          style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+        >
           {item.avatar_url ? (
             <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
           ) : (
@@ -95,7 +108,7 @@ const AddFriend = () => {
               {isOnline ? "Online" : "Offline"}
             </Text>
           </View>
-        </View>
+        </TouchableOpacity>
 
         <TouchableOpacity onPress={() => sendFriendRequest(item.id)}>
           <LinearGradient
