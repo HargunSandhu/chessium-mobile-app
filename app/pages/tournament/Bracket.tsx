@@ -3,12 +3,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
   Image,
+  ScrollView,
+  StyleSheet,
+  Text,
   TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -129,10 +129,9 @@ const TournamentBracket = () => {
 
     const myMatch = matches.find(
       (m) =>
-        m.status === "pending" &&
+        (m.status === "pending" || m.status === "ongoing") &&
         (m.player1?.id === userId || m.player2?.id === userId),
     );
-
     console.log("🎯 myMatch found:", myMatch);
 
     if (myMatch) {

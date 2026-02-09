@@ -1,128 +1,180 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  Dimensions,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  Image,
-  Modal,
-} from "react-native";
+import { Image, StyleSheet, Text, View, Dimensions } from "react-native";
 import Chessboard, { DefaultThemes } from "dawikk-chessboard";
-import { useLocalSearchParams, router } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { supabase, SUPABASE_URL } from "@/app/lib/Supabase";
-import { FontAwesome6, Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button1, Button2 } from "@/components/Buttons";
+import { Ionicons } from "@expo/vector-icons";
 
 type Color = "white" | "black";
-type GameResult = "win" | "loss" | "draw" | null;
+
+type PlayerInfo = {
+  id: string;
+  name: string;
+  avatar_url: string | null;
+};
+
+const BOARD_SIZE = Dimensions.get("window").width;
+
+const formatTime = (ms: number) => {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+};
 
 const TournamentGameScreen = () => {
-  const params = useLocalSearchParams();
-
-  const matchId =
-    typeof params.matchId === "string" ? params.matchId : undefined;
-
-  const tournamentMatchId =
-    typeof params.tournamentMatchId === "string"
-      ? params.tournamentMatchId
-      : undefined;
-
-  const BOARD_SIZE = Dimensions.get("window").width;
+  const { tournamentMatchId } = useLocalSearchParams<{
+    tournamentMatchId: string;
+  }>();
 
   const channelRef = useRef<any>(null);
-  const playerColorRef = useRef<Color | null>(null);
+  const matchChannelRef = useRef<any>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [fen, setFen] = useState<string | null>(null);
   const [turn, setTurn] = useState<Color | null>(null);
   const [playerColor, setPlayerColor] = useState<Color | null>(null);
-  const [matchStatus, setMatchStatus] = useState<string | null>(null);
 
-  const [showResultModal, setShowResultModal] = useState(false);
-  const [gameResult, setGameResult] = useState<GameResult>(null);
+  const [topPlayer, setTopPlayer] = useState<PlayerInfo | null>(null);
+  const [bottomPlayer, setBottomPlayer] = useState<PlayerInfo | null>(null);
 
+  const [whiteTime, setWhiteTime] = useState(0);
+  const [blackTime, setBlackTime] = useState(0);
+  const [lastMoveAt, setLastMoveAt] = useState<number>(Date.now());
+  const [matchId, setMatchId] = useState<string | null>(null);
+
+  // ---------------- INIT GAME ----------------
   useEffect(() => {
-    if (!matchId) return;
+    if (!tournamentMatchId) return;
 
     const init = async () => {
+      console.log("[INIT] Loading tournament match", tournamentMatchId);
+
       const { data: auth } = await supabase.auth.getUser();
-      if (!auth.user) return;
-
-      const { data: match } = await supabase
-        .from("matches")
-        .select("player_white, player_black, status, result")
-        .eq("id", matchId)
-        .single();
-
-      if (!match) return;
-
-      const myColor = auth.user.id === match.player_white ? "white" : "black";
-
-      setPlayerColor(myColor);
-      playerColorRef.current = myColor;
-      setMatchStatus(match.status);
-
-      const { data: state } = await supabase
-        .from("game_states")
-        .select("fen, turn")
-        .eq("match_id", matchId)
-        .single();
-
-      if (state) {
-        setFen(state.fen);
-        setTurn(state.turn);
+      if (!auth.user) {
+        console.error("[INIT] No authenticated user");
+        return;
       }
 
+      const userId = auth.user.id;
+
+      // 1️⃣ Fetch the actual match for this user
+      const { data: myMatch, error: matchError } = await supabase
+        .from("tournament_matches")
+        .select("*")
+        .eq("id", tournamentMatchId)
+        .single();
+
+      if (matchError || !myMatch) {
+        console.error("[INIT] Failed to fetch match:", matchError);
+        return;
+      }
+
+      console.log("[INIT] My match found:", myMatch);
+
+      setMatchId(myMatch.id); // THIS is the ID we send to backend for moves
+
+      const myColor: Color = userId === myMatch.player1_id ? "white" : "black";
+      setPlayerColor(myColor);
+      setWhiteTime(myMatch.white_time_ms);
+      setBlackTime(myMatch.black_time_ms);
+      setLastMoveAt(new Date(myMatch.last_move_at).getTime());
+
+      // 2️⃣ Fetch player profiles
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, avatar_url")
+        .in("id", [myMatch.player1_id, myMatch.player2_id]);
+
+      if (profiles) {
+        const white = profiles.find((p) => p.id === myMatch.player1_id) ?? null;
+        const black = profiles.find((p) => p.id === myMatch.player2_id) ?? null;
+
+        if (myColor === "white") {
+          setBottomPlayer(
+            white && {
+              id: white.id,
+              name: white.full_name,
+              avatar_url: white.avatar_url,
+            },
+          );
+          setTopPlayer(
+            black && {
+              id: black.id,
+              name: black.full_name,
+              avatar_url: black.avatar_url,
+            },
+          );
+        } else {
+          setBottomPlayer(
+            black && {
+              id: black.id,
+              name: black.full_name,
+              avatar_url: black.avatar_url,
+            },
+          );
+          setTopPlayer(
+            white && {
+              id: white.id,
+              name: white.full_name,
+              avatar_url: white.avatar_url,
+            },
+          );
+        }
+      }
+
+      // 3️⃣ Fetch initial game state
+      const { data: state, error: stateError } = await supabase
+        .from("tournament_game_states")
+        .select("fen, turn")
+        .eq("tournament_match_id", myMatch.id)
+        .single();
+
+      if (stateError || !state) {
+        console.error("[INIT] Failed to fetch game state:", stateError);
+        return;
+      }
+
+      setFen(state.fen);
+      setTurn(state.turn);
+
+      console.log("[INIT] Game loaded. FEN:", state.fen, "Turn:", state.turn);
+
+      // ---------------- SUBSCRIPTIONS ----------------
       channelRef.current = supabase
-        .channel(`game-${matchId}`)
+        .channel(`game-${myMatch.id}`)
         .on(
           "postgres_changes",
           {
             event: "UPDATE",
             schema: "public",
-            table: "matches",
-            filter: `id=eq.${matchId}`,
+            table: "tournament_game_states",
+            filter: `tournament_match_id=eq.${myMatch.id}`,
           },
-          async (payload) => {
-            const updated = payload.new;
+          (payload) => {
+            console.log("[SUB] Game state updated", payload.new);
+            setFen(payload.new.fen);
+            setTurn(payload.new.turn);
+          },
+        )
+        .subscribe();
 
-            if (updated.status === "finished") {
-              setMatchStatus("finished");
-
-              const isWhite = playerColorRef.current === "white";
-
-              if (updated.result.startsWith("white_win")) {
-                setGameResult(isWhite ? "win" : "loss");
-              } else if (updated.result.startsWith("black_win")) {
-                setGameResult(isWhite ? "loss" : "win");
-              } else {
-                setGameResult("draw");
-              }
-
-              setShowResultModal(true);
-
-              // 🔥 resolve tournament match
-              if (tournamentMatchId) {
-                const { data } = await supabase.auth.getSession();
-                const token = data.session?.access_token;
-
-                await fetch(
-                  `${SUPABASE_URL}/functions/v1/resolve-tournament-match`,
-                  {
-                    method: "POST",
-                    headers: {
-                      Authorization: `Bearer ${token}`,
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                      tournamentMatchId,
-                      matchId,
-                    }),
-                  },
-                );
-              }
-            }
+      matchChannelRef.current = supabase
+        .channel(`match-${myMatch.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "tournament_matches",
+            filter: `id=eq.${myMatch.id}`,
+          },
+          (payload) => {
+            console.log("[SUB] Match updated", payload.new);
+            setWhiteTime(payload.new.white_time_ms);
+            setBlackTime(payload.new.black_time_ms);
+            setLastMoveAt(new Date(payload.new.last_move_at).getTime());
           },
         )
         .subscribe();
@@ -131,86 +183,169 @@ const TournamentGameScreen = () => {
     init();
 
     return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-      }
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+      if (matchChannelRef.current)
+        supabase.removeChannel(matchChannelRef.current);
+      if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [matchId, tournamentMatchId]);
+  }, [tournamentMatchId]);
+
+  // ---------------- TIMER ----------------
+  useEffect(() => {
+    if (!turn) return;
+    if (timerRef.current) clearInterval(timerRef.current);
+
+    timerRef.current = setInterval(() => {
+      if (turn === "white") setWhiteTime((t) => Math.max(0, t - 1000));
+      else setBlackTime((t) => Math.max(0, t - 1000));
+    }, 1000);
+
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [turn]);
+
+  // ---------------- HANDLE MOVE ----------------
+  const handleMove = async (from: string, to: string, promotion?: string) => {
+    if (!matchId || !playerColor || !turn) return;
+    if (playerColor !== turn) return;
+
+    console.log(
+      `[MOVE] Attempting move ${from} -> ${to}, promotion: ${promotion}`,
+    );
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+
+      if (!token) {
+        console.error("[MOVE] No access token");
+        return;
+      }
+
+      // ✅ Use the correct match ID
+      const res = await fetch(
+        `${SUPABASE_URL}/functions/v1/tournament-make-move`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            match_id: matchId,
+            from,
+            to,
+            promotion,
+          }),
+        },
+      );
+
+      const text = await res.text();
+      if (!res.ok) {
+        console.error("[MOVE] Move failed:", res.status, text);
+        return;
+      }
+
+      console.log("[MOVE] Move success:", text);
+
+      setLastMoveAt(Date.now());
+    } catch (err) {
+      console.error("[MOVE] Error sending move:", err);
+    }
+  };
 
   if (!fen || !turn || !playerColor) {
     return (
       <SafeAreaView style={styles.loading}>
-        <Text style={{ color: "#fff" }}>Loading game…</Text>
+        <Text style={styles.loadingText}>Loading game…</Text>
       </SafeAreaView>
     );
   }
 
-  const canMove = playerColor === turn && matchStatus === "active";
+  const isTopActive = turn !== playerColor;
+  const isBottomActive = turn === playerColor;
 
   return (
     <SafeAreaView style={styles.main}>
-      <Chessboard
-        fen={fen}
-        boardTheme={DefaultThemes.blue}
-        perspective={playerColor}
-        readonly={!canMove}
-        showCoordinates={false}
-        onMove={() => {}}
-      />
-
-      <Modal transparent visible={showResultModal}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>
-              {gameResult === "win"
-                ? "You Won"
-                : gameResult === "loss"
-                  ? "You Lost"
-                  : "Draw"}
-            </Text>
-
-            <Button1
-              text="Back to Bracket"
-              onPress={() =>
-                router.replace({
-                  pathname: "/pages/tournament/Bracket",
-                })
-              }
+      <View
+        style={[styles.playerContainer, isTopActive && styles.activePlayer]}
+      >
+        <View style={styles.playerRow}>
+          {topPlayer?.avatar_url ? (
+            <Image
+              source={{ uri: topPlayer.avatar_url }}
+              style={styles.avatar}
             />
-          </View>
+          ) : (
+            <Ionicons name="person-circle-outline" size={48} color="#fff" />
+          )}
+          <Text style={styles.playerName}>{topPlayer?.name}</Text>
         </View>
-      </Modal>
+        <Text style={styles.time}>
+          {formatTime(playerColor === "white" ? blackTime : whiteTime)}
+        </Text>
+      </View>
+
+      <View style={{ width: BOARD_SIZE, height: BOARD_SIZE }}>
+        <Chessboard
+          fen={fen}
+          boardTheme={DefaultThemes.blue}
+          perspective={playerColor}
+          readonly={playerColor !== turn}
+          showCoordinates={false}
+          onMove={handleMove}
+        />
+      </View>
+
+      <View
+        style={[styles.playerContainer, isBottomActive && styles.activePlayer]}
+      >
+        <View style={styles.playerRow}>
+          {bottomPlayer?.avatar_url ? (
+            <Image
+              source={{ uri: bottomPlayer.avatar_url }}
+              style={styles.avatar}
+            />
+          ) : (
+            <Ionicons name="person-circle-outline" size={48} color="#fff" />
+          )}
+          <Text style={styles.playerName}>{bottomPlayer?.name}</Text>
+        </View>
+        <Text style={styles.time}>
+          {formatTime(playerColor === "white" ? whiteTime : blackTime)}
+        </Text>
+      </View>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  main: { flex: 1, backgroundColor: "#0B0E13" },
+  main: { flex: 1, backgroundColor: "#0B0E13", alignItems: "center" },
   loading: {
     flex: 1,
     backgroundColor: "#0B0E13",
     alignItems: "center",
     justifyContent: "center",
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContainer: {
-    backgroundColor: "#0B0E13",
-    padding: 20,
-    borderRadius: 14,
+  loadingText: { color: "#fff", fontSize: 18 },
+  playerContainer: {
     borderWidth: 1,
-    borderColor: "#3b82f6",
+    borderRadius: 12,
+    borderColor: "#1F2937",
+    width: "90%",
+    height: 70,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 20,
+    justifyContent: "space-between",
   },
-  modalTitle: {
-    color: "#fff",
-    fontSize: 22,
-    marginBottom: 20,
-    textAlign: "center",
-  },
+  playerRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  playerName: { color: "#fff", fontSize: 18 },
+  avatar: { width: 48, height: 48, borderRadius: 24 },
+  activePlayer: { borderColor: "#3b82f6" },
+  time: { color: "#fff", fontSize: 18, fontWeight: "bold" },
 });
 
 export default TournamentGameScreen;

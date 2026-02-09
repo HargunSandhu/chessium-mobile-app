@@ -106,21 +106,35 @@ const TournamentLobby = () => {
     fetchPlayers();
   };
 
-  const startTournament = async () => {
-    if (!isCreator || loading) return;
+const startTournament = async () => {
+  if (!isCreator || loading) return;
 
-    setLoading(true);
+  setLoading(true);
 
-    const { error } = await supabase.functions.invoke("start-tournament", {
-      body: { tournamentId },
-    });
+  const result = await supabase.functions.invoke("start-tournament", {
+    body: { tournament_id: tournamentId },
+  });
+  
+  setLoading(false);
+  if (result.error) {
+    console.log("🔥 FULL ERROR OBJECT:", JSON.stringify(result.error, null, 2));
+    Alert.alert("Error", "Check console logs");
+  }
 
-    setLoading(false);
+  // if (result.error) {
+  //   console.log("🔥 start-tournament ERROR:", result.error);
 
-    if (error) {
-      Alert.alert("Error", error.message);
-    }
-  };
+  //   const message =
+  //     typeof result.error === "string"
+  //       ? result.error
+  //       : result.error.message || "Failed to start tournament";
+
+  //   Alert.alert("Start Tournament Error", message);
+  //   return;
+  // }
+
+};
+
 
   const formatText = (text: string) =>
     text.charAt(0).toUpperCase() + text.slice(1);
