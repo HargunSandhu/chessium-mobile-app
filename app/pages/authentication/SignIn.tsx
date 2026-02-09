@@ -75,7 +75,6 @@ const SignIn = () => {
           width={"90%"}
         />
       </View>
-      <Button2 text="Continue as a Guest" width={"90%"} />
       <TouchableOpacity
         onPress={() => {
           router.navigate("/pages/authentication/ForgotPassword");

@@ -84,7 +84,6 @@ const SignUp = () => {
           width={"90%"}
         />
       </View>
-      <Button2 text="Continue as a Guest" width={"90%"} />
       <View
         style={{ flexDirection: "row", alignItems: "center", marginTop: 15 }}
       >
