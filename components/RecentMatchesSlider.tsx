@@ -1,7 +1,9 @@
-import React, { useMemo, useRef } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { View, Text, StyleSheet, Image } from "react-native";
 import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { Ionicons } from "@expo/vector-icons";
+import { supabase } from "@/app/lib/Supabase";
 import { Images } from "@/assets/images/Images";
 import {
   Inter_400Regular,
@@ -9,45 +11,93 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 
+type Match = {
+  id: string;
+  time_mode_id: number;
+  player_white: string;
+  player_black: string;
+  opponent_name: string;
+  opponent_avatar?: string | null;
+  result: "Win" | "Lose" | "Draw";
+  time_control: string;
+};
+
 const RecentMatchesSlider = () => {
+  const [matches, setMatches] = useState<Match[]>([]);
   const sheetRef = useRef<BottomSheet>(null);
   const snapPoints = useMemo(() => ["40%", "75%", "90%"], []);
-  const [fontsLoaded] = useFonts({
-    // Inter_700Bold,
-    Inter_400Regular,
-    Inter_500Medium,
-  });
+  const [fontsLoaded] = useFonts({ Inter_400Regular, Inter_500Medium });
 
-  const recentMatches = [
-    {
-      id: 1,
-      timeControl: "Blitz",
-      opponent: "Mariel Denver",
-      opponentAvatar: "https://randomuser.me/api/portraits/women/45.jpg",
-      result: "Win",
-    },
-    {
-      id: 2,
-      timeControl: "Bullet",
-      opponent: "Manuel Hoff",
-      opponentAvatar: "https://randomuser.me/api/portraits/men/32.jpg",
-      result: "Loose",
-    },
-    {
-      id: 3,
-      timeControl: "Rapid",
-      opponent: "Player3",
-      opponentAvatar: "https://randomuser.me/api/portraits/women/46.jpg",
-      result: "Win",
-    },
-    {
-      id: 4,
-      timeControl: "Bullet",
-      opponent: "Manuel Hoff",
-      opponentAvatar: "https://randomuser.me/api/portraits/men/32.jpg",
-      result: "Loose",
-    },
-  ];
+  const userId = supabase.auth.getUser().then((res) => res.data.user?.id);
+
+  useEffect(() => {
+    const fetchMatches = async () => {
+      const user = await supabase.auth.getUser();
+      if (!user.data.user) return;
+
+      const userId = user.data.user.id;
+
+      const { data, error } = await supabase
+        .from("matches")
+        .select(
+          `
+          id,
+          player_white,
+          player_black,
+          time_mode_id,
+          result,
+          profiles_white:profiles!player_white (full_name, avatar_url),
+          profiles_black:profiles!player_black (full_name, avatar_url)
+        `,
+        )
+        .or(`player_white.eq.${userId},player_black.eq.${userId}`)
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      if (error) {
+        console.error("Error fetching matches:", error);
+        return;
+      }
+
+      const mapped: Match[] = data.map((match: any) => {
+        const isWhite = match.player_white === userId;
+        const opponentProfile = isWhite
+          ? match.profiles_black
+          : match.profiles_white;
+
+        let time_control = "Blitz";
+        if (match.time_mode_id === 1) time_control = "Bullet";
+        else if (match.time_mode_id === 2) time_control = "Blitz";
+        else if (match.time_mode_id === 3) time_control = "Rapid";
+        let result: "Win" | "Lose" | "Draw";
+
+        if (match.result?.startsWith("white_win")) {
+          result = isWhite ? "Win" : "Lose";
+        } else if (match.result?.startsWith("black_win")) {
+          result = isWhite ? "Lose" : "Win";
+        } else if (match.result?.startsWith("draw") || match.result === null) {
+          result = "Draw";
+        } else {
+          result = "Draw";
+        }
+
+        return {
+          id: match.id,
+          time_mode_id: match.time_mode_id,
+          player_white: match.player_white,
+          player_black: match.player_black,
+          opponent_name: opponentProfile?.full_name ?? "Guest",
+          opponent_avatar: opponentProfile?.avatar_url ?? null,
+          result,
+          time_control,
+        };
+      });
+
+      setMatches(mapped);
+    };
+
+    fetchMatches();
+  }, []);
 
   const getIconForTimeControl = (timeControl: string) => {
     switch (timeControl.toLowerCase()) {
@@ -76,24 +126,33 @@ const RecentMatchesSlider = () => {
         <BottomSheetView style={styles.contentContainer}>
           <Text style={styles.title}>RECENT MATCHES</Text>
 
-          {recentMatches.map((match, index) => (
+          {matches.map((match, index) => (
             <View key={match.id}>
               <View style={styles.matchRow}>
                 <View style={styles.leftSection}>
                   <Image
-                    source={{ uri: getIconForTimeControl(match.timeControl) }}
+                    source={{ uri: getIconForTimeControl(match.time_control) }}
                     style={styles.icon}
                     resizeMode="contain"
                   />
-                  <Text style={styles.timeControl}>{match.timeControl}</Text>
+                  <Text style={styles.timeControl}>{match.time_control}</Text>
                 </View>
 
                 <View style={styles.middleSection}>
-                  <Image
-                    source={{ uri: match.opponentAvatar }}
-                    style={styles.avatar}
-                  />
-                  <Text style={styles.opponent}>{match.opponent}</Text>
+                  {match.opponent_avatar ? (
+                    <Image
+                      source={{ uri: match.opponent_avatar }}
+                      style={styles.avatar}
+                    />
+                  ) : (
+                    <Ionicons
+                      name="person-circle-outline"
+                      size={28}
+                      color="#fff"
+                      style={{ marginRight: 8 }}
+                    />
+                  )}
+                  <Text style={styles.opponent}>{match.opponent_name}</Text>
                 </View>
 
                 <View style={styles.rightSection}>
@@ -101,7 +160,12 @@ const RecentMatchesSlider = () => {
                     style={[
                       styles.result,
                       {
-                        color: match.result === "Win" ? "#22C55E" : "#EF4444",
+                        color:
+                          match.result === "Win"
+                            ? "#22C55E"
+                            : match.result === "Lose"
+                              ? "#EF4444"
+                              : "#FACC15",
                       },
                     ]}
                   >
@@ -110,7 +174,7 @@ const RecentMatchesSlider = () => {
                 </View>
               </View>
 
-              {index !== recentMatches.length - 1 && (
+              {index !== matches.length - 1 && (
                 <View style={styles.dividerContainer}>
                   <View style={styles.divider} />
                 </View>

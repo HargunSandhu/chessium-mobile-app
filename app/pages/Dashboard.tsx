@@ -71,7 +71,9 @@ const Dashboard = () => {
             </LinearGradient>
           </TouchableOpacity>
 
-          <TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.navigate("/pages/LocalGameScreen")}
+          >
             <LinearGradient
               colors={["#3B82F6", "#2563EB", "#1E3A8A"]}
               style={styles.gradient}

@@ -99,28 +99,6 @@ const FriendList = () => {
     });
   };
 
-  const handlePlay = async (friendId: string) => {
-    if (!myId) return;
-
-    const session = await supabase.auth.getSession();
-    const token = session.data.session?.access_token;
-    if (!token) return;
-
-    await fetch(`${SUPABASE_URL}/functions/v1/friend-matchmaking`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        action: "send",
-        from_user_id: myId,
-        to_user_id: friendId,
-        time_mode_id: 1,
-      }),
-    });
-  };
-
   const acceptChallenge = async (challengeId: string) => {
     if (!myId) return;
     const session = await supabase.auth.getSession();
@@ -197,12 +175,12 @@ const FriendList = () => {
             />
           </TouchableOpacity>
 
-          <TouchableOpacity
+          {/* <TouchableOpacity
             style={styles.btn}
             onPress={() => handlePlay(profile.id)}
           >
             <Ionicons name="game-controller" size={24} color="#3b82f6" />
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
       </View>
     );
@@ -314,20 +292,20 @@ const styles = StyleSheet.create({
   popupTitle: {
     color: "#fff",
     fontSize: 18,
-    fontWeight: "700"
+    fontWeight: "700",
   },
   popupText: {
     color: "#fff",
-    marginTop: 10
+    marginTop: 10,
   },
   popupBtn: {
     paddingVertical: 8,
     paddingHorizontal: 16,
-    borderRadius: 8
+    borderRadius: 8,
   },
   popupBtnText: {
     color: "#fff",
-    fontWeight: "600"
+    fontWeight: "600",
   },
 });
 
