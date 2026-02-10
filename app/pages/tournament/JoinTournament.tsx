@@ -87,6 +87,8 @@ const JoinTournament = () => {
     });
 
     fetchTournaments();
+    alert("Tournament created successfully");
+    router.back();
   };
 
   const formatText = (text: string) =>

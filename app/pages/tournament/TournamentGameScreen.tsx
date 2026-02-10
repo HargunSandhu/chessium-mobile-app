@@ -43,20 +43,18 @@ const TournamentGameScreen = () => {
   const [fen, setFen] = useState<string | null>(null);
   const [turn, setTurn] = useState<Color | null>(null);
   const [playerColor, setPlayerColor] = useState<Color | null>(null);
+  const [myUserId, setMyUserId] = useState<string | null>(null);
 
   const [topPlayer, setTopPlayer] = useState<PlayerInfo | null>(null);
   const [bottomPlayer, setBottomPlayer] = useState<PlayerInfo | null>(null);
 
   const [whiteTime, setWhiteTime] = useState(0);
   const [blackTime, setBlackTime] = useState(0);
-  const [lastMoveAt, setLastMoveAt] = useState<number>(Date.now());
 
   const [matchId, setMatchId] = useState<string | null>(null);
-
   const [gameOver, setGameOver] = useState(false);
   const [resultMessage, setResultMessage] = useState<string | null>(null);
 
-  // ---------------- INIT GAME ----------------
   useEffect(() => {
     if (!tournamentMatchId) return;
 
@@ -64,9 +62,8 @@ const TournamentGameScreen = () => {
       const { data: auth } = await supabase.auth.getUser();
       if (!auth.user) return;
 
-      const userId = auth.user.id;
+      setMyUserId(auth.user.id);
 
-      // Fetch match
       const { data: myMatch } = await supabase
         .from("tournament_matches")
         .select("*")
@@ -76,14 +73,14 @@ const TournamentGameScreen = () => {
       if (!myMatch) return;
 
       setMatchId(myMatch.id);
-      const myColor: Color = userId === myMatch.player1_id ? "white" : "black";
+
+      const myColor: Color =
+        auth.user.id === myMatch.player1_id ? "white" : "black";
       setPlayerColor(myColor);
 
       setWhiteTime(myMatch.white_time_ms);
       setBlackTime(myMatch.black_time_ms);
-      setLastMoveAt(new Date(myMatch.last_move_at).getTime());
 
-      // Fetch player profiles
       const { data: profiles } = await supabase
         .from("profiles")
         .select("id, full_name, avatar_url")
@@ -126,7 +123,6 @@ const TournamentGameScreen = () => {
         }
       }
 
-      // Fetch game state
       const { data: state } = await supabase
         .from("tournament_game_states")
         .select("fen, turn")
@@ -138,7 +134,6 @@ const TournamentGameScreen = () => {
         setTurn(state.turn);
       }
 
-      // Subscribe to game state updates
       channelRef.current = supabase
         .channel(`game-${myMatch.id}`)
         .on(
@@ -156,7 +151,6 @@ const TournamentGameScreen = () => {
         )
         .subscribe();
 
-      // Subscribe to match updates (timers, game over)
       matchChannelRef.current = supabase
         .channel(`match-${myMatch.id}`)
         .on(
@@ -170,29 +164,17 @@ const TournamentGameScreen = () => {
           (payload) => {
             setWhiteTime(payload.new.white_time_ms);
             setBlackTime(payload.new.black_time_ms);
-            setLastMoveAt(new Date(payload.new.last_move_at).getTime());
 
-            if (payload.new.status === "finished") {
-              let message = "Game over";
-              if (payload.new.reason === "timeout") {
-                message =
-                  turn === playerColor
-                    ? "You lost on time!"
-                    : "You won! Opponent timed out.";
-              } else if (payload.new.winner_id === null) {
-                message = "Draw!";
-              } else if (
-                (payload.new.winner_id === myMatch.player1_id &&
-                  playerColor === "white") ||
-                (payload.new.winner_id === myMatch.player2_id &&
-                  playerColor === "black")
-              ) {
-                message = "You won!";
-              } else {
-                message = "You lost!";
-              }
-              setResultMessage(message);
+            if (payload.new.status === "completed") {
               setGameOver(true);
+
+              if (!payload.new.winner_id) {
+                setResultMessage("Draw!");
+              } else if (payload.new.winner_id === auth.user.id) {
+                setResultMessage("You won!");
+              } else {
+                setResultMessage("You lost!");
+              }
             }
           },
         )
@@ -209,9 +191,9 @@ const TournamentGameScreen = () => {
     };
   }, [tournamentMatchId]);
 
-  // ---------------- TIMER ----------------
   useEffect(() => {
-    if (!turn) return;
+    if (!turn || gameOver) return;
+
     if (timerRef.current) clearInterval(timerRef.current);
 
     timerRef.current = setInterval(() => {
@@ -222,31 +204,24 @@ const TournamentGameScreen = () => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [turn]);
+  }, [turn, gameOver]);
 
-  // ---------------- HANDLE MOVE ----------------
   const handleMove = async (from: string, to: string, promotion?: string) => {
-    if (!matchId || !playerColor || !turn) return;
+    if (!matchId || !playerColor || !turn || gameOver) return;
     if (playerColor !== turn) return;
 
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-      if (!token) return;
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return;
 
-      await fetch(`${SUPABASE_URL}/functions/v1/tournament-make-move`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ match_id: matchId, from, to, promotion }),
-      });
-
-      setLastMoveAt(Date.now());
-    } catch (err) {
-      console.error("[MOVE] Error sending move:", err);
-    }
+    await fetch(`${SUPABASE_URL}/functions/v1/tournament-make-move`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ match_id: matchId, from, to, promotion }),
+    });
   };
 
   if (!fen || !turn || !playerColor) {
@@ -262,7 +237,6 @@ const TournamentGameScreen = () => {
 
   return (
     <SafeAreaView style={styles.main}>
-      {/* TOP PLAYER */}
       <View
         style={[styles.playerContainer, isTopActive && styles.activePlayer]}
       >
@@ -282,19 +256,17 @@ const TournamentGameScreen = () => {
         </Text>
       </View>
 
-      {/* CHESSBOARD */}
       <View style={{ width: BOARD_SIZE, height: BOARD_SIZE }}>
         <Chessboard
           fen={fen}
           boardTheme={DefaultThemes.blue}
           perspective={playerColor}
-          readonly={playerColor !== turn || gameOver}
+          readonly={gameOver || playerColor !== turn}
           showCoordinates={false}
           onMove={handleMove}
         />
       </View>
 
-      {/* BOTTOM PLAYER */}
       <View
         style={[styles.playerContainer, isBottomActive && styles.activePlayer]}
       >
@@ -314,7 +286,6 @@ const TournamentGameScreen = () => {
         </Text>
       </View>
 
-      {/* GAME OVER MODAL */}
       {gameOver && resultMessage && (
         <View style={styles.modalOverlay}>
           <View style={styles.modal}>
@@ -364,7 +335,6 @@ const styles = StyleSheet.create({
   avatar: { width: 48, height: 48, borderRadius: 24 },
   activePlayer: { borderColor: "#3b82f6" },
   time: { color: "#fff", fontSize: 18, fontWeight: "bold" },
-
   modalOverlay: {
     position: "absolute",
     top: 0,
@@ -374,7 +344,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.75)",
     justifyContent: "center",
     alignItems: "center",
-    zIndex: 999,
   },
   modal: {
     backgroundColor: "#141821",
